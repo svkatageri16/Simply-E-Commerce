@@ -649,6 +649,7 @@ export class CatalogService {
           name: dto.name ?? product.name,
           description: dto.description !== undefined ? dto.description : product.description,
           mode: (dto.mode as any) ?? product.mode,
+          status: (dto.status as any) ?? product.status,
           categoryId: dto.categoryId !== undefined ? (dto.categoryId || null) : product.categoryId,
           minOrderQuantity: dto.minOrderQuantity ?? product.minOrderQuantity,
           leadTimeDays: dto.leadTimeDays !== undefined ? dto.leadTimeDays : product.leadTimeDays,
@@ -663,7 +664,14 @@ export class CatalogService {
       const variantMediaMap = new Map<string, string>();
 
       // 2. Options and Variants update if provided
-      if (dto.options !== undefined && dto.variants !== undefined) {
+      if (dto.variants !== undefined) {
+        if (dto.options === undefined) {
+          for (const option of product.options) for (const value of option.values) {
+            optionValueMap.set(value.value.trim(), value.id);
+            optionValueMap.set(value.value.trim().toLowerCase(), value.id);
+            optionValueByIdMap.set(value.id, value.id);
+          }
+        }
         // Validation: Combination safety
         if (dto.options && dto.options.length > 0) {
           if (dto.options.length > 3) {
@@ -709,7 +717,7 @@ export class CatalogService {
         }
 
         // Recreate options transactionally
-        await tx.productOption.deleteMany({ where: { productId: product.id } });
+        if (dto.options !== undefined) await tx.productOption.deleteMany({ where: { productId: product.id } });
 
         if (dto.options && dto.options.length > 0) {
           for (let i = 0; i < dto.options.length; i++) {
@@ -749,6 +757,7 @@ export class CatalogService {
         // Sync variants
         const existingVariants = await tx.productVariant.findMany({
           where: { productId: product.id, deletedAt: null },
+          include: { inventory: true },
         });
 
         const touchedVariantIds = new Set<string>();
@@ -756,31 +765,45 @@ export class CatalogService {
         if (dto.variants && dto.variants.length > 0) {
           for (let i = 0; i < dto.variants.length; i++) {
             const varDto = dto.variants[i];
-            const matched = existingVariants.find(
-              (v) => (varDto.id && v.id === varDto.id) || v.sku === varDto.sku
-            );
+            const matched =
+              existingVariants.find(
+                (v) => (varDto.id && v.id === varDto.id) || v.sku === varDto.sku
+              ) || (existingVariants.length === 1 && dto.variants.length === 1 ? existingVariants[0] : undefined);
 
             let variantId: string;
             const pricePaise =
-              varDto.pricePaise ?? (product.mode === ProductMode.ENQUIRY_ONLY ? 0 : (dto.pricePaise ?? 0));
-            const compareAtPaise = varDto.compareAtPricePaise ?? dto.compareAtPricePaise;
-            const stockQty = varDto.stock ?? varDto.initialStock ?? 0;
+              varDto.pricePaise ?? dto.pricePaise ?? matched?.pricePaise ?? 0;
+            const compareAtPaise = varDto.compareAtPricePaise !== undefined ? varDto.compareAtPricePaise : dto.compareAtPricePaise !== undefined ? dto.compareAtPricePaise : matched?.compareAtPricePaise;
+            const stockQty = varDto.stock ?? varDto.initialStock ?? matched?.inventory?.stockOnHand ?? 0;
 
             if (matched) {
               variantId = matched.id;
+              const targetSku = varDto.sku?.trim() || matched.sku;
+              if (targetSku !== matched.sku) {
+                const skuConflict = await tx.productVariant.findFirst({
+                  where: {
+                    storeId: tenant.storeId,
+                    sku: targetSku,
+                    id: { not: matched.id },
+                  },
+                });
+                if (skuConflict) {
+                  throw new ConflictException(`SKU "${targetSku}" already exists in this store.`);
+                }
+              }
               await tx.productVariant.update({
                 where: { id: matched.id },
                 data: {
-                  sku: varDto.sku?.trim() || matched.sku,
+                  sku: targetSku,
                   pricePaise,
                   compareAtPricePaise: compareAtPaise,
-                  status: varDto.status || VariantStatus.ACTIVE,
+                  status: varDto.status || matched.status,
                   sortOrder: i,
                 },
               });
 
               // Re-link option values
-              await tx.productVariantOptionValue.deleteMany({ where: { variantId: matched.id } });
+              if (varDto.optionValues !== undefined || dto.options !== undefined) await tx.productVariantOptionValue.deleteMany({ where: { variantId: matched.id } });
               if (varDto.optionValues && Array.isArray(varDto.optionValues)) {
                 for (const valString of varDto.optionValues) {
                   const optValId =

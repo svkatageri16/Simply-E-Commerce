@@ -132,6 +132,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
   const [comparePriceRupees, setComparePriceRupees] = useState('');
   const [stock, setStock] = useState('0');
   const [sku, setSku] = useState('');
+  const [simpleVariantId, setSimpleVariantId] = useState<string | null>(null);
 
   // Media state (MediaItemDraft with instant blob preview + upload state + canonical publicUrl)
   const [mediaItems, setMediaItems] = useState<MediaItemDraft[]>([]);
@@ -215,6 +216,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
     setComparePriceRupees('');
     setStock('0');
     setSku('');
+    setSimpleVariantId(null);
     setMediaItems([]);
     setUploadingImage(false);
     setImageError(null);
@@ -263,6 +265,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
       const initialStock = firstVar?.inventory?.stockOnHand ?? 0;
       setStock(String(initialStock));
       setSku(firstVar?.sku || '');
+      setSimpleVariantId(firstVar?.id || null);
 
       // Load media with canonical publicUrl and deduplicate by mediaAssetId
       const seenAssetIds = new Set<string>();
@@ -956,6 +959,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
         payload.options = [];
         payload.variants = [
           {
+            id: simpleVariantId || undefined,
             sku: sku.trim() || `${trimmedName.slice(0, 4).toUpperCase()}-001`,
             pricePaise: basePaise || 0,
             compareAtPricePaise: comparePaise,

@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from '../../src/app.module';
+import { AuthService } from '../../src/modules/auth/auth.service';
+import { SEED_IDS } from '@simply/db';
+import { PrismaClient } from '@prisma/client';
 import request from 'supertest';
 
 describe('Merchant Flow 02A — Product Creation End-to-End Integration Suite', () => {
@@ -30,7 +33,13 @@ describe('Merchant Flow 02A — Product Creation End-to-End Integration Suite', 
     await app.getHttpAdapter().getInstance().ready();
 
     async function getSellerToken(phone: string): Promise<string> {
-      const pinLogin = await request(app.getHttpServer())
+      let pinLogin = await request(app.getHttpServer())
+        .post('/auth/pin/login')
+        .send({ phone, pin: '123456' });
+      if (pinLogin.body.data?.accessToken) {
+        return pinLogin.body.data.accessToken;
+      }
+      pinLogin = await request(app.getHttpServer())
         .post('/auth/pin/login')
         .send({ phone, pin: '654321' });
       if (pinLogin.body.data?.accessToken) {
@@ -62,7 +71,11 @@ describe('Merchant Flow 02A — Product Creation End-to-End Integration Suite', 
     }
 
     sellerTokenA = await getSellerToken('+919876543210');
-    sellerTokenB = await getSellerToken('+919800000001');
+    const authService = app.get<AuthService>(AuthService);
+    const prisma = app.get<PrismaClient>(PrismaClient);
+    const userB = await prisma.user.findUnique({ where: { id: SEED_IDS.tenantBOwner } });
+    const bTokens = await (authService as any).createSessionAndIssueTokens(userB, SEED_IDS.tenantB, SEED_IDS.storeB);
+    sellerTokenB = bTokens.accessToken;
   });
 
   afterAll(async () => {
@@ -228,6 +241,7 @@ describe('Merchant Flow 02A — Product Creation End-to-End Integration Suite', 
         description: 'Made to order based on blueprints.',
         mode: 'ENQUIRY_ONLY',
         enquiryCtaText: 'Request Blueprint Quote',
+        mediaAssetIds: [uploadedMediaAssetId],
       });
 
     expect(res.status).toBe(201);
@@ -242,6 +256,7 @@ describe('Merchant Flow 02A — Product Creation End-to-End Integration Suite', 
       .send({
         name: 'Online Shirt Without Price',
         mode: 'SELL_ONLINE',
+        mediaAssetIds: [uploadedMediaAssetId],
       });
 
     expect(res.status).toBe(400);
