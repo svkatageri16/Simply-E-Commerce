@@ -1,3 +1,4 @@
+import { getSellerUrl as getPreviewSellerOrigin } from '../../../utils/config';
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -62,7 +63,7 @@ export default function StoreProductsPage() {
 
   useEffect(() => {
     if (router.query.embedded === 'true' && !loading && storeData) {
-      window.parent.postMessage({ type: 'CATALOG_PREVIEW_READY' }, '*');
+      window.parent.postMessage({ type: 'CATALOG_PREVIEW_READY' }, new URL(getPreviewSellerOrigin()).origin);
     }
   }, [router.query.embedded, loading, Boolean(storeData)]);
 
@@ -81,7 +82,7 @@ export default function StoreProductsPage() {
   useEffect(() => {
     if (router.query.embedded === 'true') {
       const handleMessage = (event: MessageEvent) => {
-        if (event.data?.type === 'UPDATE_THEME_PREVIEW' && event.data.themeConfig) {
+        if (event.origin === new URL(getPreviewSellerOrigin()).origin && event.source === window.parent && event.data?.type === 'UPDATE_THEME_PREVIEW' && event.data.themeConfig) {
           setStoreData((prev: any) => {
             if (!prev) return prev;
             return {

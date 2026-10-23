@@ -5,6 +5,7 @@ import { CartProvider } from '../context/CartContext';
 import { ToastProvider } from '../components/ui/Toast';
 import { StorefrontLocaleProvider } from '@simply/i18n';
 import '../styles/globals.css';
+import { PreviewNavigationBridge } from '../components/PreviewNavigationBridge';
 
 function StorefrontAppLocaleWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -35,6 +36,7 @@ export default function App({ Component, pageProps }: AppProps) {
             <link rel="manifest" href="/manifest.json" />
           </Head>
           <Component {...pageProps} />
+          <PreviewNavigationBridge />
         </ToastProvider>
       </StorefrontAppLocaleWrapper>
     </CartProvider>

@@ -1,5 +1,5 @@
 import { getPublicStoreUrl } from '@simply/types';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { RefreshCw, Smartphone, Monitor, Tablet } from 'lucide-react';
 import { useSellerI18n } from '@simply/i18n';
@@ -24,15 +24,11 @@ export const MiniStorePreview: React.FC<MiniStorePreviewProps> = ({
   const router = useRouter();
   const { t } = useSellerI18n();
   const [deviceMode, setDeviceMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
-  const [currentPage, setCurrentPage] = useState<'home' | 'products' | 'about'>(activePage || 'home');
+  const [localPage, setLocalPage] = useState<'home' | 'products' | 'about'>(activePage);
+  const currentPage = onPageChange ? activePage : localPage;
+  const internalFrameRef = useRef<HTMLIFrameElement>(null);
+  const frameRef = iframeRef || internalFrameRef;
   const [refreshKey, setRefreshKey] = useState(0);
-
-  // Sync internal state if parent controls activePage
-  useEffect(() => {
-    if (activePage && activePage !== currentPage) {
-      setCurrentPage(activePage);
-    }
-  }, [activePage]);
 
   const slug = store?.slug || 'sk-general-stores';
   const [storefrontUrl, setStorefrontUrl] = useState(getStorefrontUrl());
@@ -41,13 +37,26 @@ export const MiniStorePreview: React.FC<MiniStorePreviewProps> = ({
     setStorefrontUrl(getStorefrontUrl());
   }, []);
 
-  const previewIframeUrl = `${getPublicStoreUrl(slug, storefrontUrl, { preview: true, page: currentPage === 'home' ? undefined : currentPage })}&embedded=true${refreshKey > 0 ? `&_t=${refreshKey}` : ''}`;
+  const previewIframeUrl = `${getPublicStoreUrl(slug, storefrontUrl, { preview: true })}&embedded=true`;
   const pagePath = getPublicStoreUrl(slug, '', { page: currentPage === 'home' ? undefined : currentPage });
 
   const handlePageSwitch = (page: 'home' | 'products' | 'about') => {
-    setCurrentPage(page);
-    onPageChange?.(page);
+    if (onPageChange) onPageChange(page); else setLocalPage(page);
   };
+
+  const navigateFrame = () => frameRef.current?.contentWindow?.postMessage(
+    { type: 'PREVIEW_NAVIGATE', page: currentPage, slug }, new URL(storefrontUrl).origin);
+  useEffect(() => { navigateFrame(); }, [currentPage, slug, storefrontUrl]);
+  useEffect(() => {
+    const changed = (event: MessageEvent) => {
+      if (event.origin !== new URL(storefrontUrl).origin || event.source !== frameRef.current?.contentWindow || event.data.slug !== slug) return;
+      if (event.data.type === 'PREVIEW_BRIDGE_READY') { navigateFrame(); return; }
+      if (event.data.type !== 'PREVIEW_ROUTE_CHANGED') return;
+      if (['home', 'products', 'about'].includes(event.data.page)) handlePageSwitch(event.data.page);
+    };
+    window.addEventListener('message', changed);
+    return () => window.removeEventListener('message', changed);
+  }, [storefrontUrl, slug, currentPage, onPageChange]);
 
   const handleRefresh = () => {
     setRefreshKey((k) => k + 1);
@@ -195,9 +204,10 @@ export const MiniStorePreview: React.FC<MiniStorePreviewProps> = ({
           }`}
         >
           <iframe
-            ref={iframeRef}
-            key={`${pagePath}_${refreshKey}`}
+            ref={frameRef}
+            key={`${slug}_${refreshKey}`}
             src={previewIframeUrl}
+            onLoad={navigateFrame}
             className="w-full h-full flex-1 border-0 bg-white"
             title={t('brandStudio.storefrontInteractiveBuyerPreview')}
           />

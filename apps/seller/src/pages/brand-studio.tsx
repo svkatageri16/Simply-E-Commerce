@@ -98,7 +98,7 @@ export default function BrandStudioPage() {
   // A newly navigated catalog requests current edits after its data is ready.
   useEffect(() => {
     const ready = (event: MessageEvent) => {
-      if (event.source === iframeRef.current?.contentWindow && ['CATALOG_PREVIEW_READY', 'BRAND_PREVIEW_READY'].includes(event.data?.type)) {
+      if (event.origin === new URL(getStorefrontUrl()).origin && event.source === iframeRef.current?.contentWindow && ['CATALOG_PREVIEW_READY', 'BRAND_PREVIEW_READY'].includes(event.data?.type)) {
         setPreviewRevision((revision) => revision + 1);
       }
     };
@@ -500,7 +500,7 @@ export default function BrandStudioPage() {
             storeNameSize,
           },
         },
-        '*'
+        new URL(getStorefrontUrl()).origin
       );
     }
   }, [
