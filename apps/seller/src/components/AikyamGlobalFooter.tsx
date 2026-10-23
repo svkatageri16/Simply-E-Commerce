@@ -22,8 +22,8 @@ export const AikyamGlobalFooter: React.FC<AikyamGlobalFooterProps> = ({
       aria-label="Platform attribution"
       className={`w-full py-4 px-4 text-center text-[11px] sm:text-xs leading-relaxed border-t transition-colors ${themeClasses} ${className}`}
     >
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
-        <span>© 2026 AIKYAM AI SYSTEMS /</span>
+      <p className="max-w-7xl mx-auto break-words">
+        <span>© 2026 AIKYAM AI SYSTEMS /</span>{' '}
         <a
           href="https://www.aikyamaisystems.com/"
           target="_blank"
@@ -33,7 +33,7 @@ export const AikyamGlobalFooter: React.FC<AikyamGlobalFooterProps> = ({
           www.aikyamaisystems.com
         </a>
         <span>. All rights reserved. Powered by AIKYAM AI SYSTEMS</span>
-      </div>
+      </p>
     </footer>
   );
 };

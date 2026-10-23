@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth, apiClient } from '../context/AuthContext';
-import { AikyamGlobalFooter } from '../components/AikyamGlobalFooter';
 import {
   Store,
   ArrowRight,
@@ -692,7 +691,6 @@ export default function OnboardingPage() {
           )}
         </div>
       </div>
-      <AikyamGlobalFooter />
     </div>
   );
 }

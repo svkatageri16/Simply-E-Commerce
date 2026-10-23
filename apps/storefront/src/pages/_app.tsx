@@ -6,6 +6,7 @@ import { ToastProvider } from '../components/ui/Toast';
 import { StorefrontLocaleProvider } from '@simply/i18n';
 import '../styles/globals.css';
 import { PreviewNavigationBridge } from '../components/PreviewNavigationBridge';
+import { AikyamGlobalFooter } from '../components/AikyamGlobalFooter';
 
 function StorefrontAppLocaleWrapper({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -27,6 +28,7 @@ function StorefrontAppLocaleWrapper({ children }: { children: React.ReactNode })
 }
 
 export default function App({ Component, pageProps }: AppProps) {
+  const router = useRouter();
   return (
     <CartProvider>
       <StorefrontAppLocaleWrapper>
@@ -36,6 +38,7 @@ export default function App({ Component, pageProps }: AppProps) {
             <link rel="manifest" href="/manifest.json" />
           </Head>
           <Component {...pageProps} />
+          <AikyamGlobalFooter theme={router.pathname.startsWith('/store/') || router.pathname.startsWith('/track/') ? 'dark' : 'subtle'} />
           <PreviewNavigationBridge />
         </ToastProvider>
       </StorefrontAppLocaleWrapper>

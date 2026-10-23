@@ -1,7 +1,6 @@
 import { getPublicStoreUrl } from '@simply/types';
 import React from 'react';
 import Link from 'next/link';
-import { AikyamGlobalFooter } from './AikyamGlobalFooter';
 import { 
   Heart, 
   MapPin, 
@@ -268,7 +267,6 @@ export const StoreFooter: React.FC<StoreFooterProps> = ({ store, themeConfig }) 
             </a>
           </p>
         </div>
-        <AikyamGlobalFooter theme="dark" className="border-t border-gray-800/80 pt-4 mt-6 text-gray-400 bg-transparent" />
       </div>
     </footer>
   );

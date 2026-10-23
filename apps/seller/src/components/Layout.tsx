@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuth } from '../context/AuthContext';
 import { useSellerI18n, SellerLanguageSelect } from '@simply/i18n';
-import { AikyamGlobalFooter } from './AikyamGlobalFooter';
 import {
   LayoutDashboard,
   Eye,
@@ -391,7 +390,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, title, actions }) => {
         )}
         {/* Main Content Viewport */}
         <main className="p-2.5 sm:p-4 lg:py-3.5 lg:px-6 flex-1 max-w-7xl w-full mx-auto box-border">{children}</main>
-        <AikyamGlobalFooter />
       </div>
     </div>
   );

@@ -2,7 +2,6 @@ import { LANDING_ANCHORS, scrollToLandingAnchor } from './anchors';
 import React from 'react';
 import { ShieldCheck, Mail, Globe } from 'lucide-react';
 import { useLandingI18n } from '@simply/i18n';
-import { AikyamGlobalFooter } from '../AikyamGlobalFooter';
 
 interface LandingFooterProps {
   sellerUrl: string;
@@ -153,7 +152,6 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ sellerUrl }) => {
             </div>
           </div>
         </div>
-        <AikyamGlobalFooter />
       </div>
     </footer>
   );

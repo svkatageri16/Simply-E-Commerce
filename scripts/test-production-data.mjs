@@ -677,6 +677,10 @@ try {
     category: c.name,
     visibleProductCount: c._count.products,
   }));
+  if (process.env.RUN_GLOBAL_FOOTER === '1') {
+    const { verifyGlobalFooters } = await import('./test-global-footers.mjs');
+    await verifyGlobalFooters(fixtures, out);
+  }
   if (process.env.RUN_LAUNCH_SMOKE === '1') {
     const { verifyLaunchBrowser } = await import('./test-launch-browser-smoke.mjs');
     await verifyLaunchBrowser(fixtures, db, out);
