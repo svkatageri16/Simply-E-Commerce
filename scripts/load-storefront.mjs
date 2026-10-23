@@ -72,6 +72,8 @@ export async function loadStorefront(
     const percentile = (value) =>
       Number(latencies[Math.ceil(latencies.length * value) - 1].toFixed(2));
     const result = {
+      runnerRssMb: Math.round(process.memoryUsage().rss / 1048576),
+      apiHeapMb: await fetch(`${api}/health`).then(r => r.json()).then(body => (body.data || body).memoryUsageMb).catch(() => null),
       users,
       requests: latencies.length,
       errors: failures.length,

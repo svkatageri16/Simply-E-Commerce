@@ -38,14 +38,14 @@ assert.strictEqual(tMerchantEnglish('orderStatus.COMPLETED'), 'Completed');
 
 assert.strictEqual(tStorefrontMarathi('storefront.addToCart'), 'कार्टमध्ये जोडा');
 assert.strictEqual(tStorefrontMarathi('storefront.buyNow'), 'आता खरेदी करा');
-assert.strictEqual(tStorefrontMarathi('storefront.checkout'), 'चेकआऊट');
+assert.strictEqual(tStorefrontMarathi('storefront.checkout'), 'चेकआउट');
 assert.strictEqual(tStorefrontMarathi('storefront.selectColour'), 'रंग निवडा');
 assert.strictEqual(tStorefrontMarathi('storefront.selectSize'), 'आकार निवडा');
 console.log('  -> Passed: Merchant screens are in English while Storefront is in Marathi.\n');
 
 // CASE C: Landing = hi-IN, Merchant = mr-IN, Storefront = en-IN (All three simultaneously independent)
 console.log('CASE C: Landing hi-IN, Merchant mr-IN, Storefront en-IN');
-assert.strictEqual(tLandingHindi('landing.createFreeStore'), 'मुफ़्त स्टोर बनाएं');
+assert.strictEqual(tLandingHindi('landing.createFreeStore'), 'मुफ्त स्टोर बनाएं');
 assert.strictEqual(tLandingHindi('landing.merchantLogin'), 'मर्चेंट लॉगिन');
 assert.strictEqual(tLandingHindi('landing.howItWorks'), 'यह कैसे काम करता है');
 
@@ -110,7 +110,7 @@ console.log('CASE 56: Theme UI Localization Test');
 assert.strictEqual(tStorefrontEnglish('theme.shopNow'), 'Shop Now');
 assert.strictEqual(tStorefrontEnglish('theme.featuredProducts'), 'Featured Products');
 assert.strictEqual(tStorefrontMarathi('theme.shopNow'), 'आता खरेदी करा');
-assert.strictEqual(tStorefrontMarathi('theme.featuredProducts'), 'वैशिष्ट्यीकृत उत्पादने');
+assert.strictEqual(tStorefrontMarathi('theme.featuredProducts'), 'विशेष उत्पादने');
 console.log('  -> Passed: Same theme structural UI translates into Marathi without duplicating themes.\n');
 
 // Currency & Indian numbering test

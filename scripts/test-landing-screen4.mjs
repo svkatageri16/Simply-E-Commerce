@@ -176,11 +176,11 @@ try{
   assert.equal(await touchPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'mobile swipe keeps page within viewport');
   await touchContext.close();
   await page.getByRole('button',{name:'English',exact:true}).first().click();
-  const register=page.locator('header a[href$="/login?mode=register"]').first();
+  const register=page.locator('header a[href$="/register"]').first();
   const registerHref=await register.getAttribute('href');
   await register.click();
   await page.locator('#register-phone').waitFor();
-  assert.ok(page.url().includes('/login?mode=register'),'Create Store route');
+  assert.ok(page.url().endsWith('/register'),'Create Store route');
   await page.goto(base);
   const login=page.locator('header a[href$="/login"]').first();
   const loginHref=await login.getAttribute('href');

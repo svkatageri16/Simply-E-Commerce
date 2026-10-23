@@ -310,6 +310,7 @@ export async function verifyProductionBrowsers(fixtures, merchantCategories) {
               });
             await page.getByPlaceholder("e.g. Anand Sharma").fill("Test Buyer");
             await page.getByPlaceholder("9876543210").fill("9876543210");
+            await page.getByTestId('checkout-email-input').fill('buyer@example.test');
             await page.getByTestId("place-order-button").click();
             await page.waitForURL("**/order/DIRECT-TEST*");
             assert.ok(placed);

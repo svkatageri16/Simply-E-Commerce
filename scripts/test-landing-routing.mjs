@@ -15,7 +15,7 @@ try {
     const page = await context.newPage();
     page.on("pageerror", (e) => errors.push(e.message));
     for (const [suffix, field] of [
-      ["/login?mode=register", "#register-email"],
+      ["/register", "#register-email"],
       ["/login", "#login-phone"],
     ]) {
       await page.goto(base, { waitUntil: "networkidle" });
