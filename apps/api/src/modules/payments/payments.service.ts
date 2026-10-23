@@ -1,3 +1,4 @@
+import { subscriptionPrice } from '../subscriptions/subscription-price';
 import {
   Injectable,
   NotFoundException,
@@ -224,6 +225,7 @@ export class PaymentsService {
       }
     }
 
+    const quote = subscriptionPrice(plan.pricePaise);
     const storeId = tenant.stores[0]?.id || 'platform';
     const provider = this.razorpayProvider;
 
@@ -231,7 +233,7 @@ export class PaymentsService {
     const providerResult = await provider.createPaymentOrder({
       tenantId,
       storeId,
-      amountPaise: plan.pricePaise,
+      amountPaise: quote.totalPaise,
       currency: 'INR',
       purpose: PaymentPurpose.PLATFORM_SUBSCRIPTION,
       subscriptionId: plan.id,
@@ -247,9 +249,10 @@ export class PaymentsService {
           storeId,
           purpose: PaymentPurpose.PLATFORM_SUBSCRIPTION,
           subscriptionId: plan.id,
+          baseAmountPaise: quote.baseAmountPaise, taxPaise: quote.taxPaise, gstBasisPoints: quote.gstBasisPoints,
           provider: PaymentProviderType.RAZORPAY,
           providerOrderId: providerResult.providerOrderId,
-          amountPaise: plan.pricePaise,
+          amountPaise: quote.totalPaise,
           currency: 'INR',
           status: PaymentStatus.PENDING,
           idempotencyKey,
@@ -273,6 +276,7 @@ export class PaymentsService {
             purpose: PaymentPurpose.PLATFORM_SUBSCRIPTION,
             planCode: plan.code,
             planName: plan.name,
+      ...quote,
           };
         }
       }
@@ -288,6 +292,7 @@ export class PaymentsService {
       purpose: PaymentPurpose.PLATFORM_SUBSCRIPTION,
       planCode: plan.code,
       planName: plan.name,
+      ...quote,
     };
 
     if (idempotencyKey) {
@@ -517,6 +522,7 @@ export class PaymentsService {
                 subscriptionId: activatedSub.id,
                 invoiceNumber: `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
                 amountPaise: paymentOrder.amountPaise,
+                baseAmountPaise: paymentOrder.baseAmountPaise, taxPaise: paymentOrder.taxPaise, gstBasisPoints: paymentOrder.gstBasisPoints,
                 currency: paymentOrder.currency,
                 status: 'PAID',
                 paidAt: new Date(),

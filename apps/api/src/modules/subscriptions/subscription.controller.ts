@@ -104,6 +104,9 @@ export class SubscriptionController {
 
     const pdf = generateInvoicePdfBuffer({
       invoiceNumber: invoice.invoiceNumber,
+      formattedBaseAmount: invoice.baseAmountPaise == null ? undefined : `INR ${(invoice.baseAmountPaise / 100).toFixed(2)}`,
+      formattedTaxAmount: invoice.taxPaise == null ? undefined : `INR ${(invoice.taxPaise / 100).toFixed(2)}`,
+      gstRate: invoice.gstBasisPoints == null ? undefined : invoice.gstBasisPoints / 100,
       status: invoice.status,
       tenantName: invoice.tenant.name,
       tenantSlug: store?.slug || invoice.tenant.slug,

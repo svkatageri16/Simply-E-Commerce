@@ -18,6 +18,9 @@ export interface InvoicePdfData {
   paymentStatus: string;
   planName: string;
   formattedAmount: string;
+  formattedBaseAmount?: string;
+  formattedTaxAmount?: string;
+  gstRate?: number;
 }
 
 function escapePdfText(str?: string | null): string {
@@ -91,12 +94,12 @@ export function generateInvoicePdfBuffer(data: InvoicePdfData): Buffer {
   // Totals Box
   const totalsY = row1Y - 45;
   s += `BT\n/F1 9 Tf\n370 ${totalsY} Td\n(Subtotal:) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n495 ${totalsY} Td\n(${escapePdfText(data.formattedAmount)}) Tj\nET\n`;
+  s += `BT\n/F1 9 Tf\n495 ${totalsY} Td\n(${escapePdfText(data.formattedBaseAmount || data.formattedAmount)}) Tj\nET\n`;
 
   s += `BT\n/F1 9 Tf\n370 ${totalsY - 16} Td\n(GST / Tax:) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n495 ${totalsY - 16} Td\n(INR 0.00) Tj\nET\n`;
+  s += `BT\n/F1 9 Tf\n495 ${totalsY - 16} Td\n(${escapePdfText(data.formattedTaxAmount || "Not recorded")}) Tj\nET\n`;
 
-  s += `BT\n/F1 8 Tf\n370 ${totalsY - 28} Td\n((No tax charged / Exempt)) Tj\nET\n`;
+  s += `BT\n/F1 8 Tf\n370 ${totalsY - 28} Td\n(${data.gstRate !== undefined ? "GST " + data.gstRate + "%" : "Legacy tax breakdown unavailable"}) Tj\nET\n`;
 
   s += '0.85 0.85 0.85 RG\n';
   s += `360 ${totalsY - 35} m 555 ${totalsY - 35} l S\n`;

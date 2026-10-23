@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { subscriptionPrice } from './subscription-price';
 import {
   PrismaClient,
   SubscriptionStatus,
@@ -64,6 +65,7 @@ export class SubscriptionService {
       .filter((p) => p.isPublic || (p.code || '').toUpperCase().includes('CUSTOM') || (p.code || '').toUpperCase().includes('GROWTH'))
       .map((p) => ({
         ...p,
+        ...subscriptionPrice(p.pricePaise),
         // Current subscription activation and renewal use a 30-day monthly period.
         billingPeriodDays: p.billingCycle === 'MONTHLY' ? MONTHLY_SUBSCRIPTION_DAYS : null,
         ...planAvailability(p),

@@ -51,7 +51,7 @@ const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
 ];
 
 export default function CompactDashboardPage() {
-  const { user, store, loading: authLoading } = useAuth();
+  const { user, store, loading: authLoading, setStoreContext } = useAuth();
   const router = useRouter();
   const { t, locale, formatCurrency } = useSellerI18n();
 
@@ -100,6 +100,9 @@ export default function CompactDashboardPage() {
           endDate: period === 'custom' ? endDate || customEnd : undefined,
         });
         setDashboardData(res);
+        if (res?.store) {
+          setStoreContext(res.store);
+        }
       } catch (err: any) {
         console.error('Failed to load merchant dashboard:', err);
         if (!isBackground) {
@@ -111,7 +114,7 @@ export default function CompactDashboardPage() {
         isFirstLoad.current = false;
       }
     },
-    [store, customStart, customEnd]
+    [store, customStart, customEnd, setStoreContext]
   );
 
   // Initial load and period changes
@@ -165,21 +168,35 @@ export default function CompactDashboardPage() {
     loadDashboard('custom', false, customStart, customEnd);
   };
 
+  // Active store resolution (prefer fresh store data from dashboard API if available)
+  const activeStore = dashboardData?.store || store;
+
+  // Setup / Readiness evaluation (truthful checks from backend entitlement)
+  const isLive = activeStore?.status === 'LIVE' || activeStore?.status === 'ACTIVE';
+  const hasActiveSubscription = Boolean(
+    activeStore?.subscription?.status === 'ACTIVE' ||
+    activeStore?.subscriptionStatus === 'ACTIVE' ||
+    (activeStore?.publicVisibility?.canBePublic && activeStore?.status !== 'EXPIRED')
+  );
+  const isStorePublic = Boolean(
+    activeStore?.publicVisibility?.canBePublic ?? (activeStore?.isPubliclyAccessible && isLive)
+  );
+
   const baseStorefrontUrl = getStorefrontUrl();
-  const storefrontUrl = store?.slug
-    ? store.status === 'LIVE'
-      ? getPublicStoreUrl(store.slug, baseStorefrontUrl)
-      : getPublicStoreUrl(store.slug, baseStorefrontUrl, { preview: true })
+  const storefrontUrl = activeStore?.slug
+    ? isStorePublic
+      ? getPublicStoreUrl(activeStore.slug, baseStorefrontUrl)
+      : getPublicStoreUrl(activeStore.slug, baseStorefrontUrl, { preview: true })
     : '#';
 
   const handleShareStore = () => {
-    if (!store?.slug) return;
-    const url = store.status === 'LIVE'
-      ? getPublicStoreUrl(store.slug, baseStorefrontUrl)
-      : getPublicStoreUrl(store.slug, baseStorefrontUrl, { preview: true });
+    if (!activeStore?.slug) return;
+    const url = isStorePublic
+      ? getPublicStoreUrl(activeStore.slug, baseStorefrontUrl)
+      : getPublicStoreUrl(activeStore.slug, baseStorefrontUrl, { preview: true });
 
-    if (navigator.share && store.status === 'LIVE') {
-      navigator.share({ title: store.name, url }).catch(() => {});
+    if (navigator.share && isStorePublic) {
+      navigator.share({ title: activeStore.name, url }).catch(() => {});
     } else {
       navigator.clipboard.writeText(url);
       setCopiedLink(true);
@@ -211,17 +228,10 @@ export default function CompactDashboardPage() {
   const customersSeries = salesSeriesList.map((s: any) => s.customers ?? 0);
   const aovSeries = salesSeriesList.map((s: any) => (s.aovPaise ?? 0) / 100);
 
-  // Active store resolution (prefer fresh store data from dashboard API if available)
-  const activeStore = dashboardData?.store || store;
-
-  // Setup / Readiness evaluation (truthful checks)
-  const isLive = activeStore?.status === 'LIVE' || activeStore?.status === 'ACTIVE';
   const isSubscriptionValid = Boolean(
-    activeStore?.subscription?.status === 'ACTIVE' ||
-    activeStore?.subscriptionStatus === 'ACTIVE' ||
+    hasActiveSubscription ||
     (activeStore?.status !== 'EXPIRED' && !attention.subscriptionRequiresAction)
   );
-  const isStorePublic = Boolean(activeStore?.isPubliclyAccessible && isLive);
   const effectiveBranding = activeStore?.branding || store?.branding;
   const hasBrandingMedia = Boolean(effectiveBranding?.logoUrl || effectiveBranding?.heroMediaId || effectiveBranding?.bannerUrl);
   const hasCustomTheme = Boolean(
@@ -247,14 +257,14 @@ export default function CompactDashboardPage() {
   // =========================================================================
   const issues: { text: string; link: string; linkText: string; priority: number }[] = [];
 
-  if (attention.subscriptionRequiresAction || store?.status === 'EXPIRED') {
+  if (attention.subscriptionRequiresAction || activeStore?.status === 'EXPIRED' || !hasActiveSubscription) {
     issues.push({
       priority: 1,
       text: t('dashboard.subscriptionRequired'),
       link: '/subscription',
       linkText: `${t('dashboard.viewPlans')} →`,
     });
-  } else if (store?.status !== 'LIVE' && !isLive) {
+  } else if (!isStorePublic && !isLive) {
     issues.push({
       priority: 2,
       text: t('dashboard.storePrivateMode'),
@@ -330,9 +340,9 @@ export default function CompactDashboardPage() {
   issues.sort((a, b) => a.priority - b.priority);
 
   const storeStatusText =
-    store?.status === 'LIVE'
+    isStorePublic
       ? t('common.active')
-      : store?.status === 'EXPIRED'
+      : activeStore?.status === 'EXPIRED'
       ? t('navigation.expired')
       : t('navigation.private');
 
@@ -371,9 +381,9 @@ export default function CompactDashboardPage() {
       description: t('dashboard.choosePlanDesc'),
       stepsLabel: t('dashboard.growthStepsHeading'),
       steps: [
-        { step: 1, title: 'Pick Plan Tier', desc: 'Select Starter or Growth based on your catalog size.' },
+        { step: 1, title: 'Launch Plan', desc: 'Activate your branded online store for ₹999 + GST / 30 days.' },
         { step: 2, title: 'Complete Payment', desc: 'Pay securely via UPI, Card, or NetBanking.' },
-        { step: 3, title: 'Launch Public Store', desc: 'Immediately enable public checkout and custom domain features.' },
+        { step: 3, title: 'Make Store Live', desc: 'Immediately enable public checkout and sharing.' },
       ],
       primaryCta: {
         label: t('dashboard.viewPlans'),
@@ -618,10 +628,15 @@ export default function CompactDashboardPage() {
                 </span>
                 <span className="text-[var(--merchant-text-muted)] text-xs">•</span>
                 <span className="text-[11px] sm:text-xs font-medium text-[var(--merchant-text-secondary)]">
-                  {store?.name || 'My Store'} ·{' '}
-                  <span className={store?.status === 'LIVE' ? 'text-emerald-500 font-semibold' : 'text-[var(--merchant-primary)] font-semibold'}>
+                  {activeStore?.name || store?.name || 'My Store'} ·{' '}
+                  <span className={isStorePublic ? 'text-emerald-500 font-semibold' : 'text-[var(--merchant-primary)] font-semibold'}>
                     {storeStatusText}
                   </span>
+                  {activeStore?.subscription?.currentPeriodEnd && hasActiveSubscription && (
+                    <span className="text-[var(--merchant-text-muted)] text-[11px] ml-2 font-normal hidden sm:inline">
+                      (Renews {new Date(activeStore.subscription.currentPeriodEnd).toLocaleDateString()})
+                    </span>
+                  )}
                 </span>
                 {isRefreshing && (
                   <span className="inline-flex items-center text-[10px] text-[var(--merchant-text-muted)] gap-1 ml-2">

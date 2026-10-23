@@ -432,6 +432,23 @@ export class DashboardService {
         timezone: store.timezone,
         branding: store.branding,
         themeConfigs: store.themeConfigs,
+        subscription: activeSub ? {
+          id: activeSub.id,
+          status: activeSub.status,
+          currentPeriodStart: activeSub.currentPeriodStart,
+          currentPeriodEnd: activeSub.currentPeriodEnd,
+          plan: activeSub.plan ? {
+            id: activeSub.plan.id,
+            code: activeSub.plan.code,
+            name: activeSub.plan.name,
+            pricePaise: activeSub.plan.pricePaise,
+          } : null,
+        } : null,
+        publicVisibility: {
+          isPublic: isSubscriptionValid && store.status === StoreStatus.LIVE && store.isPubliclyAccessible,
+          requiresPayment: !isSubscriptionValid || effectiveStoreStatus === 'EXPIRED',
+          reason: isSubscriptionValid ? null : (store.status === StoreStatus.LIVE ? 'SUBSCRIPTION_EXPIRED' : 'SUBSCRIPTION_REQUIRED'),
+        },
       },
     };
   }

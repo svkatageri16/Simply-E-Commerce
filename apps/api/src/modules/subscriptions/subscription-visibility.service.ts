@@ -27,10 +27,11 @@ export class SubscriptionVisibilityService {
   public async getEffectivePublicStatus(storeId: string) {
     try {
       await this.evaluateVisibility(storeId);
-      return { isPublic: true, evaluatedAt: new Date().toISOString() };
+      return { isPublic: true, requiresPayment: false, reason: null, evaluatedAt: new Date().toISOString() };
     } catch (error) {
       if (!(error instanceof DomainException)) throw error;
-      return { isPublic: false, evaluatedAt: new Date().toISOString() };
+      const reason = (error.getResponse() as any).code as string;
+      return { isPublic: false, requiresPayment: ['SUBSCRIPTION_REQUIRED', 'SUBSCRIPTION_EXPIRED'].includes(reason), reason, evaluatedAt: new Date().toISOString() };
     }
   }
 

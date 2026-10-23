@@ -38,7 +38,7 @@ const loadRazorpayScript = (): Promise<boolean> => {
 };
 
 export default function SubscriptionPage() {
-  const { api, user } = useAuth();
+  const { api, user, refreshProfile } = useAuth();
   const { t, locale } = useSellerI18n();
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<any[]>([]);
@@ -150,6 +150,7 @@ export default function SubscriptionPage() {
 
             alert(t('subscription.paymentSuccess'));
             await loadSubscriptionInfo();
+            await refreshProfile();
           } catch (verifyErr: any) {
             alert(verifyErr.message || t('subscription.paymentFailed'));
           } finally {
@@ -331,7 +332,7 @@ export default function SubscriptionPage() {
                           {formatPaise(p.pricePaise)}
                         </span>
                         <span className="text-xs font-medium text-[var(--merchant-text-muted)]">
-                          /{p.billingCycle?.toLowerCase() || 'monthly'}
+                          + GST / {p.billingPeriodDays || 30} days
                         </span>
                       </div>
                     )}

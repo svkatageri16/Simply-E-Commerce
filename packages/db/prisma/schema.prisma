@@ -698,6 +698,9 @@ model SubscriptionEvent {
 }
 
 model SubscriptionInvoice {
+  baseAmountPaise Int?     @map("base_amount_paise")
+  taxPaise        Int?     @map("tax_paise")
+  gstBasisPoints  Int?     @map("gst_basis_points")
   id             String    @id @default(uuid())
   tenantId       String    @map("tenant_id")
   subscriptionId String    @map("subscription_id")
@@ -1109,6 +1112,10 @@ model CartItem {
 // ==============================================================================
 
 model Order {
+  buyerEmail        String?           @map("buyer_email")
+  buyerName         String?           @map("buyer_name")
+  checkoutKey       String?           @unique @map("checkout_key")
+  checkoutHash      String?           @map("checkout_hash")
   id                String            @id @default(uuid())
   tenantId          String            @map("tenant_id")
   storeId           String            @map("store_id")
@@ -1243,6 +1250,9 @@ model MerchantPaymentAccount {
 }
 
 model PaymentOrder {
+  baseAmountPaise Int?                @map("base_amount_paise")
+  taxPaise        Int?                @map("tax_paise")
+  gstBasisPoints  Int?                @map("gst_basis_points")
   id              String              @id @default(uuid())
   tenantId        String              @map("tenant_id")
   storeId         String              @map("store_id")

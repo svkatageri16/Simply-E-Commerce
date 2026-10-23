@@ -403,7 +403,7 @@ export class AdminController {
     res.header('Cache-Control', 'private, no-store');
 
     const stream = fs.createReadStream(filePath);
-    return res.send(stream);
+    return stream.pipe(res);
   }
 
   @Get('merchants/:id/documents/:docId/view')
@@ -421,7 +421,7 @@ export class AdminController {
     res.header('Cache-Control', 'private, no-store');
 
     const stream = fs.createReadStream(filePath);
-    return res.send(stream);
+    return stream.pipe(res);
   }
 
   @RequirePermission(AdminPermission.ORDERS_VIEW)
