@@ -488,14 +488,10 @@ export default function ProductDetailPage() {
     }
 
     const priceText = formatPaise(currentPricePaise);
-    const prodUrl = typeof window !== 'undefined'
-      ? window.location.href
-      : `https://letzshop.store/store/${slug}/product/${id}`;
 
     const greeting = `${t('storefront.enquiryGreeting')} ${store?.name || ''},`.trim();
     const interested = t('storefront.enquiryInterested');
     const priceLine = `${t('storefront.enquiryPrice')}: ${priceText}`;
-    const productLine = `${t('storefront.enquiryProduct')}:\n${prodUrl}`;
     const prompt = t('storefront.enquiryPrompt');
     const sentVia = t('storefront.enquirySentVia');
 
@@ -508,7 +504,6 @@ export default function ProductDetailPage() {
       ...(variantDetails.length > 0 ? [variantDetails.join('\n')] : []),
       ...(!isEnquiryOnly ? [priceLine] : []),
       '',
-      productLine,
       '',
       prompt,
       '',

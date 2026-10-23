@@ -159,9 +159,33 @@ function resolvePaymentDisplay(
 // BUYER TEMPLATES
 // ==============================================================================
 
+/** Only the token-protected storefront review route is a valid delivered CTA. */
+export function isPublicReviewUrl(value?: string): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password &&
+      /^\/store\/[^/]+\/review\/[^/]+\/?$/.test(url.pathname) &&
+      Boolean(url.searchParams.get('token')?.trim());
+  } catch {
+    return false;
+  }
+}
+
+/** Cleans persisted drafts produced before order/product links were removed. */
+export function sanitizeWhatsAppOrderMessage(text: string): string {
+  return text.replace(/https?:\/\/[^\s<>]+/gi, (value) => {
+    if (isPublicReviewUrl(value)) return value;
+    return '';
+  }).replace(/^\s*(?:Track(?: your order)?|Order details|You can follow your order here):?\s*$/gmi, '').trim();
+}
+
+export function buildOrderOutForDeliveryMessage(ctx: BuyerMessageContext): string {
+  return `Hello ${ctx.customerName}, your order #${ctx.orderNumber} from ${ctx.storeName} is out for delivery. Please keep your phone available.`;
+}
+
 export function buildOrderAcceptedMessage(ctx: BuyerMessageContext): string {
   const pay = resolvePaymentDisplay(ctx.paymentMethod, ctx.paymentStatus, ctx.codCollectionMethod);
-  const trackLine = ctx.trackingUrl ? `\n\nYou can follow your order here:\n${ctx.trackingUrl}` : '';
 
   return (
     `*Order Confirmed — ${ctx.storeName}*\n\n` +
@@ -172,7 +196,6 @@ export function buildOrderAcceptedMessage(ctx: BuyerMessageContext): string {
     `${ctx.itemsSummary}\n\n` +
     `*Total:* ${formatPaise(ctx.totalPaise)}\n` +
     `*Payment:* ${pay.text}` +
-    trackLine +
     `\n\nWe will keep you updated as your order progresses.\n\n` +
     `Warm regards,\n` +
     `*${ctx.storeName}*\n` +
@@ -181,7 +204,6 @@ export function buildOrderAcceptedMessage(ctx: BuyerMessageContext): string {
 }
 
 export function buildOrderReadyMessage(ctx: BuyerMessageContext): string {
-  const trackLine = ctx.trackingUrl ? `\n\nTrack your order:\n${ctx.trackingUrl}` : '';
 
   return (
     `*Your Order Is Ready*\n\n` +
@@ -190,7 +212,6 @@ export function buildOrderReadyMessage(ctx: BuyerMessageContext): string {
     `*Order Summary*\n` +
     `${ctx.itemsSummary}\n\n` +
     `*Total:* ${formatPaise(ctx.totalPaise)}` +
-    trackLine +
     `\n\nWe will notify you once it is on the way.\n\n` +
     `Warm regards,\n` +
     `*${ctx.storeName}*\n` +
@@ -213,7 +234,6 @@ export function buildOrderDispatchedBuyerMessage(ctx: BuyerMessageContext): stri
         ? `*Amount Payable on Delivery:* ${formatPaise(ctx.totalPaise)}\n`
         : '';
 
-    const trackLine = ctx.trackingUrl ? `Track your order:\n${ctx.trackingUrl}\n\n` : '';
 
     return (
       `*Your Order Is On The Way*\n\n` +
@@ -226,7 +246,6 @@ export function buildOrderDispatchedBuyerMessage(ctx: BuyerMessageContext): stri
       `*Payment:* ${pay.text}\n` +
       codDue +
       `\n` +
-      trackLine +
       `Please keep your phone reachable in case the delivery partner needs assistance locating your address.\n\n` +
       `Thank you for choosing *${ctx.storeName}*.\n` +
       `Powered by LetzShop`
@@ -234,7 +253,6 @@ export function buildOrderDispatchedBuyerMessage(ctx: BuyerMessageContext): stri
   }
 
   // Shiprocket dispatch
-  const trackLine = ctx.trackingUrl ? `Track your order:\n${ctx.trackingUrl}\n\n` : '';
   return (
     `*Your Order Has Been Shipped*\n\n` +
     `Hello ${ctx.customerName},\n\n` +
@@ -244,7 +262,6 @@ export function buildOrderDispatchedBuyerMessage(ctx: BuyerMessageContext): stri
     (ctx.awbNumber ? `*AWB*\n${ctx.awbNumber}\n\n` : '') +
     `*Order Total*\n` +
     `${formatPaise(ctx.totalPaise)}\n\n` +
-    trackLine +
     `Thank you for shopping with *${ctx.storeName}*.\n` +
     `Powered by LetzShop`
   );
@@ -252,10 +269,9 @@ export function buildOrderDispatchedBuyerMessage(ctx: BuyerMessageContext): stri
 
 export function buildOrderDeliveredMessage(ctx: BuyerMessageContext): string {
   const pay = resolvePaymentDisplay(ctx.paymentMethod, ctx.paymentStatus, ctx.codCollectionMethod);
-  const reviewCta = ctx.reviewUrl
+  const reviewCta = isPublicReviewUrl(ctx.reviewUrl)
     ? `\n*Share your experience:*\n${ctx.reviewUrl}\n`
     : '';
-  const trackLine = ctx.trackingUrl ? `\nOrder details:\n${ctx.trackingUrl}\n` : '';
 
   return (
     `*Order Delivered Successfully*\n\n` +
@@ -268,7 +284,6 @@ export function buildOrderDeliveredMessage(ctx: BuyerMessageContext): string {
     `We hope you had a great experience.\n\n` +
     `Your feedback helps this business improve and helps other customers make confident choices.\n` +
     reviewCta +
-    trackLine +
     `\nThank you for supporting *${ctx.storeName}*.\n\n` +
     `Powered by LetzShop`
   );

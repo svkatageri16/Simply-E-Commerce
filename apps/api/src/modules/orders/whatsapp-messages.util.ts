@@ -1,3 +1,5 @@
+import { buildPublicReviewUrl } from '@simply/api-contracts';
+
 export function normalizePhoneForWhatsApp(phone?: string | null): string | null {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, '');
@@ -28,15 +30,17 @@ export function generateWhatsAppMessage(
     case 'DISPATCHED':
     case 'SHIPPED': {
       const tracking = order?.trackingNumber
-        ? `Tracking: ${order.trackingNumber}${order.trackingUrl ? ` (${order.trackingUrl})` : ''}`
+        ? `Tracking: ${order.trackingNumber}`
         : '';
       return `Hello ${buyerName},\nYour order #${orderNum} from ${storeName} has been shipped.\n${tracking}\nThank you.`.trim();
     }
     case 'OUT_FOR_DELIVERY':
       return `Hello ${buyerName},\nYour order #${orderNum} from ${storeName} is out for delivery.\nPlease keep your phone available for the delivery partner.`;
     case 'DELIVERED': {
-      const reviewLink = `https://${store?.slug || 'store'}.letzshop.store/order/${orderNum}/review`;
-      return `Hello ${buyerName},\nYour order #${orderNum} from ${storeName} has been delivered.\nThank you for shopping with us.\nWe would appreciate your review: ${reviewLink}`;
+      const token = order?.reviewToken || order?.trackingToken;
+      const reviewLink = store?.slug && token ? buildPublicReviewUrl(store.slug, orderNum, token) : '';
+      const reviewCta = reviewLink ? `\nWe would appreciate your review: ${reviewLink}` : '';
+      return `Hello ${buyerName},\nYour order #${orderNum} from ${storeName} has been delivered.\nThank you for shopping with us.${reviewCta}`;
     }
     case 'CANCELLED':
       return `Hello ${buyerName},\nYour order #${orderNum} from ${storeName} has been cancelled.\nPlease contact us if you need any assistance.`;

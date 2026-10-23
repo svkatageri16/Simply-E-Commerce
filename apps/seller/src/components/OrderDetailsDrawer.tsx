@@ -36,6 +36,8 @@ import {
   buildOrderDispatchedBuyerMessage,
   buildOrderDeliveredMessage,
   buildOrderCancelledMessage,
+  buildOrderOutForDeliveryMessage,
+  sanitizeWhatsAppOrderMessage,
   buildRiderAssignmentMessage,
   buildWhatsAppDeepLink,
   normalizeIndianPhone,
@@ -45,6 +47,7 @@ import {
 } from '@simply/api-contracts';
 import { SafeImage } from './ui/SafeImage';
 import { InvoiceModal } from './InvoiceModal';
+import { getStorefrontUrl } from '../utils/config';
 
 interface OrderDetailsDrawerProps {
   order: any | null;
@@ -263,7 +266,12 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
     try {
       const stored = localStorage.getItem(`simply_wa_followup_${order.orderNumber}`);
       if (stored) {
-        setWhatsappFollowUp(JSON.parse(stored));
+        const saved = JSON.parse(stored);
+        const savedText = saved.buyerText || new URL(saved.buyerWaUrl).searchParams.get('text') || '';
+        const buyerText = sanitizeWhatsAppOrderMessage(savedText);
+        const cleaned = { ...saved, buyerText, buyerWaUrl: buildWhatsAppDeepLink(saved.customerPhone, buyerText) };
+        setWhatsappFollowUp(cleaned);
+        localStorage.setItem(`simply_wa_followup_${order.orderNumber}`, JSON.stringify(cleaned));
       } else {
         setWhatsappFollowUp(null);
       }
@@ -475,9 +483,9 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
       'Items';
 
     const effReviewToken = order.reviewToken || order.trackingToken;
-    const reviewUrl = effReviewToken
-      ? buildPublicReviewUrl(store?.slug || 'store', order.orderNumber, effReviewToken)
-      : trackingUrl;
+    const reviewUrl = effReviewToken && store?.slug
+      ? buildPublicReviewUrl(store.slug, order.orderNumber, effReviewToken, getStorefrontUrl())
+      : undefined;
 
     const ctx = {
       orderNumber: order.orderNumber,
@@ -503,14 +511,14 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
 
     let text = '';
     if (status === 'OUT_FOR_DELIVERY') {
-      text = `Hello ${customerName}, your order #${order.orderNumber} from ${store?.name || 'our store'} is out for delivery. Please keep your phone available.${trackingUrl ? ` Track: ${trackingUrl}` : ''}`;
-    } else if (status === 'DISPATCHED') {
+      text = buildOrderOutForDeliveryMessage(ctx);
+    } else if (status === 'DISPATCHED' || status === 'SHIPPED') {
       text = buildOrderDispatchedBuyerMessage(ctx);
-    } else if (status === 'COMPLETED') {
+    } else if (status === 'COMPLETED' || status === 'DELIVERED') {
       text = buildOrderDeliveredMessage(ctx);
     } else if (status === 'ACCEPTED' || status === 'CONFIRMED') {
       text = buildOrderAcceptedMessage(ctx);
-    } else if (status === 'READY') {
+    } else if (status === 'READY' || status === 'READY_TO_SHIP') {
       text = buildOrderReadyMessage(ctx);
     } else if (status === 'CANCELLED') {
       text = buildOrderCancelledMessage(ctx);
@@ -609,9 +617,9 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
         });
       } else if (targetStatus === 'COMPLETED') {
         const effReviewToken = order.reviewToken || order.trackingToken;
-        const reviewUrl = effReviewToken
-          ? buildPublicReviewUrl(store?.slug || 'store', order.orderNumber, effReviewToken)
-          : trackingUrl;
+        const reviewUrl = effReviewToken && store?.slug
+          ? buildPublicReviewUrl(store.slug, order.orderNumber, effReviewToken, getStorefrontUrl())
+          : undefined;
         buyerText = buildOrderDeliveredMessage({
           orderNumber: order.orderNumber,
           storeName: store?.name || 'Our Store',
