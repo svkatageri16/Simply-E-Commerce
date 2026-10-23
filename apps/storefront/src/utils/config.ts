@@ -8,6 +8,7 @@ export function getSellerUrl(): string {
   // 1. Explicit build/runtime environment variable
   const envSeller =
     process.env.NEXT_PUBLIC_SELLER_URL ||
+    process.env.SELLER_PUBLIC_URL ||
     process.env.SELLER_URL ||
     process.env.SELLER_DASHBOARD_URL;
 
@@ -55,8 +56,12 @@ export function getSellerStorePreviewUrl(): string {
 }
 
 export function getApiUrl(): string {
-  if (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim() !== '') {
-    return process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, '');
+  const envApi =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.API_PUBLIC_URL ||
+    process.env.API_URL;
+  if (envApi && envApi.trim() !== '') {
+    return envApi.trim().replace(/\/+$/, '');
   }
   if (typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname.toLowerCase();

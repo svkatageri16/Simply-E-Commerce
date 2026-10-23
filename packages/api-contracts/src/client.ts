@@ -89,20 +89,19 @@ export class SimplyApiClient {
   constructor(baseUrl?: string) {
     let resolvedUrl = baseUrl;
     if (!resolvedUrl || resolvedUrl === 'http://localhost:4000') {
-      const envUrl = typeof process !== 'undefined' ? process.env?.NEXT_PUBLIC_API_URL?.trim() : undefined;
-      const isProd = typeof process !== 'undefined' && (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true');
+      const envUrl = typeof process !== 'undefined'
+        ? (process.env?.NEXT_PUBLIC_API_URL || process.env?.API_PUBLIC_URL || process.env?.API_URL)?.trim()
+        : undefined;
 
       if (envUrl && envUrl !== '' && envUrl !== 'http://localhost:4000') {
         resolvedUrl = envUrl;
       } else if (typeof window !== 'undefined' && window.location) {
         const host = window.location.hostname.toLowerCase();
-        if (host.includes('onrender.com') || host.includes('letzshop.store') || (host !== 'localhost' && host !== '127.0.0.1')) {
-          resolvedUrl = 'https://simply-e-commerce.onrender.com';
+        if (host === 'letzshop.store' || host.endsWith('.letzshop.store')) {
+          resolvedUrl = 'https://api.letzshop.store';
         } else if (envUrl && envUrl !== '') {
           resolvedUrl = envUrl;
         }
-      } else if (isProd) {
-        resolvedUrl = 'https://simply-e-commerce.onrender.com';
       } else if (envUrl && envUrl !== '') {
         resolvedUrl = envUrl;
       }
@@ -152,8 +151,8 @@ export class SimplyApiClient {
       (activeBase.includes('localhost:4000') || !activeBase)
     ) {
       const host = window.location.hostname.toLowerCase();
-      if (host.includes('onrender.com') || host.includes('letzshop.store') || (host !== 'localhost' && host !== '127.0.0.1')) {
-        activeBase = 'https://simply-e-commerce.onrender.com';
+      if (host === 'letzshop.store' || host.endsWith('.letzshop.store')) {
+        activeBase = 'https://api.letzshop.store';
       }
     }
 

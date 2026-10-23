@@ -14,6 +14,10 @@ export class MediaService {
     @Inject(STORAGE_PROVIDER_TOKEN) private readonly storageProvider: StorageProvider
   ) {}
 
+  public getStorageProvider(): StorageProvider {
+    return this.storageProvider;
+  }
+
   public async uploadProductMedia(
     tenant: TenantContext,
     file: {
@@ -205,9 +209,5 @@ export class MediaService {
     });
 
     return { success: true, message: 'Media deleted successfully.' };
-  }
-
-  public getStorageProvider(): StorageProvider {
-    return this.storageProvider;
   }
 }

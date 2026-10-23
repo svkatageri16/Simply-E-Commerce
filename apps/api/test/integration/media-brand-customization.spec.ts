@@ -43,14 +43,14 @@ describe('Phase 4.5: Media Persistence, Zero-Customization, Brand Studio & Varia
     const loginResA = await request(app.getHttpServer())
       .post('/auth/otp/verify')
       .send({ phone: '+919876543210', code: '123456' });
-    sellerToken = loginResA.body.data.accessToken;
+    sellerToken = loginResA.body?.accessToken || loginResA.body?.data?.accessToken;
 
     // Login Tenant B Owner (+919876501234)
     await request(app.getHttpServer()).post('/auth/otp/send').send({ phone: '+919876501234' });
     const loginResB = await request(app.getHttpServer())
       .post('/auth/otp/verify')
       .send({ phone: '+919876501234', code: '123456' });
-    tokenB = loginResB.body.data.accessToken;
+    tokenB = loginResB.body?.accessToken || loginResB.body?.data?.accessToken;
   });
 
   afterAll(async () => {

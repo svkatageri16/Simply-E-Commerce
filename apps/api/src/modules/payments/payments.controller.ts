@@ -8,15 +8,19 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { FastifyRequest } from 'fastify';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 import { RazorpayPaymentProvider } from './providers/razorpay-payment.provider';
 import { Public } from '../../common/decorators';
 
 @ApiTags('Payments')
 @Public()
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { limit: Number(process.env.PAYMENT_RATE_LIMIT) || (process.env.NODE_ENV === 'test' ? 50000 : 30), ttl: 60000 } })
 @Controller('payments')
 export class PaymentsController {
   constructor(

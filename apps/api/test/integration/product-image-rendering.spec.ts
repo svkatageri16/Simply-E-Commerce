@@ -29,13 +29,13 @@ describe('Product Image Rendering & Media Serving Integration Suite', () => {
 
     // Authenticate seller
     const phone = '+919876543210';
-    const pin = '654321';
+    const pin = '123456';
     const pinLogin = await request(app.getHttpServer())
       .post('/auth/pin/login')
       .send({ phone, pin });
 
-    if (pinLogin.body.data?.accessToken) {
-      sellerToken = pinLogin.body.data.accessToken;
+    if (pinLogin.body?.accessToken || pinLogin.body?.data?.accessToken) {
+      sellerToken = pinLogin.body?.accessToken || pinLogin.body?.data?.accessToken;
     } else {
       await request(app.getHttpServer()).post('/auth/register/request-otp').send({ phone });
       const verifyRes = await request(app.getHttpServer())

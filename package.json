@@ -24,7 +24,8 @@
     "db:studio": "pnpm --filter @simply/db studio",
     "demo:reset": "pnpm --filter @simply/db exec tsx ../../scripts/demo-reset.ts",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
-    "test:admin:dashboard": "node scripts/test-admin-dashboard.mjs"
+    "test:admin:dashboard": "node scripts/test-admin-dashboard.mjs",
+    "smtp:test": "node scripts/test-smtp-health.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

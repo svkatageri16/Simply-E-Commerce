@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { S3Client, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { StorageProvider, UploadFileInput, UploadFileResult, FileMetadata } from './storage-provider.interface';
 
 export interface S3StorageConfig {
@@ -58,4 +58,14 @@ export class S3StorageProvider implements StorageProvider {
     }
   }
   public async exists(storageKey: string): Promise<boolean> { return Boolean(await this.getMetadata(storageKey)); }
+
+  public async getStream(storageKey: string): Promise<NodeJS.ReadableStream> {
+    const command = new GetObjectCommand({
+      Bucket: this.config.bucket,
+      Key: this.key(storageKey),
+    });
+    const result = await this.client.send(command, { abortSignal: AbortSignal.timeout(20000) });
+    if (!result.Body) throw new Error(`Empty body for key ${storageKey}`);
+    return result.Body as unknown as NodeJS.ReadableStream;
+  }
 }

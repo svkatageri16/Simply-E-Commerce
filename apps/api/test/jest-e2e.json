@@ -4,8 +4,9 @@
   "testEnvironment": "node",
   "testRegex": "test/integration/.*\\.spec\\.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\\.ts$": "ts-jest"
   },
+  "cacheDirectory": "D:/temp/jest-cache",
   "moduleNameMapper": {
     "^@simply/types$": "<rootDir>/../../packages/types/src",
     "^@simply/config$": "<rootDir>/../../packages/config/src",

@@ -44,7 +44,7 @@ export class HealthController {
     }
 
     return {
-      status: 'UP',
+      status: 'ok',
       brand: platformName,
       platformName,
       supportEmail,
@@ -117,47 +117,38 @@ export class HealthController {
   @Get('ready')
   @ApiOperation({ summary: 'Readiness probe - checks database, storage, and provider configurations' })
   async getReadiness(@Res() res: any) {
-    const checks: Record<string, any> = {
-      database: 'DOWN',
-      storage: 'DOWN',
-    };
-
-    let isReady = true;
-
-    // Check 1: PostgreSQL Connection
+    let dbConnected = false;
     try {
       await this.prisma.$queryRaw`SELECT 1;`;
-      checks.database = 'UP';
-    } catch (err: any) {
-      checks.database = 'DOWN';
-      isReady = false;
+      dbConnected = true;
+    } catch {
+      dbConnected = false;
     }
 
-    // Check 2: Storage Availability
-    try {
-      await this.storageProvider.exists('health/probe/products/readiness.jpg');
-      checks.storage = 'UP';
-    } catch (err: any) {
-      checks.storage = 'DOWN';
-      isReady = false;
-    }
-
-    // Check 3: Provider Configuration Status (Safe, offline)
-    const razorpayConfigured = !!(
+    const storageConfigured = Boolean(this.storageProvider);
+    const smtpConfigured = Boolean(
+      process.env.SMTP_HOST &&
+      process.env.SMTP_USER &&
+      (process.env.SMTP_PASSWORD || process.env.SMTP_PASS)
+    );
+    const razorpayConfigured = Boolean(
       this.razorpayProvider.platformKeyId &&
       this.razorpayProvider.platformKeySecret
     );
-    const webhookConfigured = !!this.razorpayProvider.platformWebhookSecret;
 
-    checks.providers = {
-      razorpay: razorpayConfigured ? 'Configured' : 'Not Configured',
-      webhook: webhookConfigured ? 'Configured' : 'Not Configured',
-    };
-
+    const isReady = dbConnected && storageConfigured;
     const statusCode = isReady ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
+
     return res.status(statusCode).send({
-      status: isReady ? 'READY' : 'NOT_READY',
-      checks,
+      status: isReady ? 'ok' : 'unavailable',
+      database: dbConnected ? 'connected' : 'disconnected',
+      storage: storageConfigured ? 'configured' : 'unconfigured',
+      checks: {
+        database: dbConnected ? 'connected' : 'disconnected',
+        storage: storageConfigured ? 'configured' : 'unconfigured',
+        smtp: smtpConfigured ? 'configured' : 'unconfigured',
+        razorpay: razorpayConfigured ? 'configured' : 'unconfigured',
+      },
       timestamp: new Date().toISOString(),
     });
   }

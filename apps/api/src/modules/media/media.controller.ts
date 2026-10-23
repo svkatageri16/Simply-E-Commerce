@@ -11,6 +11,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { MediaService } from './media.service';
 import { TenantGuard } from '../../common/guards/tenant.guard';
 import { CurrentTenant, Public } from '../../common/decorators';
@@ -20,13 +21,24 @@ import * as path from 'path';
 import { isPublicMediaKey, localMediaRoot } from './local-media-root';
 import { avifFallbackFormat, compatibleAvifFile } from './compatible-image';
 
+const MIME_MAP: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+};
+
 @ApiTags('Media & Storage')
 @Controller('media')
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
   @ApiBearerAuth()
-  @UseGuards(TenantGuard)
+  @UseGuards(TenantGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: Number(process.env.MEDIA_UPLOAD_RATE_LIMIT) || (process.env.NODE_ENV === 'test' ? 50000 : 30), ttl: 60000 } })
   @Post('upload')
   @ApiOperation({ summary: 'Upload product media with metadata storage' })
   async uploadMedia(
@@ -55,7 +67,8 @@ export class MediaController {
   }
 
   @ApiBearerAuth()
-  @UseGuards(TenantGuard)
+  @UseGuards(TenantGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('asset')
   @ApiOperation({ summary: 'Upload standalone media asset and return MediaAsset reference' })
   async uploadMediaAsset(
@@ -80,7 +93,8 @@ export class MediaController {
   }
 
   @ApiBearerAuth()
-  @UseGuards(TenantGuard)
+  @UseGuards(TenantGuard, ThrottlerGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('store-asset')
   @ApiOperation({ summary: 'Upload store brand asset (logo, banner, favicon) with 5MB limit' })
   async uploadStoreAsset(
@@ -122,6 +136,28 @@ export class MediaController {
     let safeKey = (storageKey || '').replace(/^[\/\\]+/, '');
     if (safeKey.startsWith('file/')) safeKey = safeKey.slice(5);
     if (!isPublicMediaKey(safeKey)) throw new NotFoundException('Requested media file not found.');
+
+    const ext = path.extname(safeKey).toLowerCase();
+
+    // S3 / Cloudflare R2 Provider streaming
+    const provider = this.mediaService.getStorageProvider() as any;
+    if (provider?.kind === 'S3' && typeof provider.getStream === 'function') {
+      try {
+        const stream = await provider.getStream(safeKey);
+        if (MIME_MAP[ext]) {
+          res.header('Content-Type', MIME_MAP[ext]);
+        }
+        res.header('Cache-Control', 'public, max-age=86400');
+        res.header('Cross-Origin-Resource-Policy', 'cross-origin');
+        if (typeof res.send === 'function') {
+          return res.send(stream);
+        }
+        return (stream as any).pipe(res.raw || res);
+      } catch {
+        throw new NotFoundException('Requested media file not found.');
+      }
+    }
+
     let absolutePath = path.resolve(rootDir, safeKey);
 
     // If file prefix was included in safeKey (e.g. /media/file/<key>), also resolve without it
@@ -154,29 +190,18 @@ export class MediaController {
       const fallback = avifFallbackFormat(accept);
       if (fallback) responsePath = await compatibleAvifFile(absolutePath, fallback);
     }
-    const ext = path.extname(responsePath).toLowerCase();
-    const mimeMap: Record<string, string> = {
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.webp': 'image/webp',
-      '.avif': 'image/avif',
-      '.gif': 'image/gif',
-      '.svg': 'image/svg+xml',
-    };
-    if (mimeMap[ext]) {
-      res.header('Content-Type', mimeMap[ext]);
+    const finalExt = path.extname(responsePath).toLowerCase();
+    if (MIME_MAP[finalExt]) {
+      res.header('Content-Type', MIME_MAP[finalExt]);
     }
 
     const stream = fs.createReadStream(responsePath);
     res.header('Cache-Control', 'public, max-age=86400');
     res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    stream.on('error', (err) => {
-      if (!res.headersSent) {
-        res.status(404).send('Not Found');
-      }
-    });
-    return stream.pipe(res);
+    if (typeof res.send === 'function') {
+      return res.send(stream);
+    }
+    return stream.pipe(res.raw || res);
   }
 
   @Public()

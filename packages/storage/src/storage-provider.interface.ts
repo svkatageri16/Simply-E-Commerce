@@ -29,4 +29,5 @@ export interface StorageProvider {
   getUrl(storageKey: string): string;
   getMetadata(storageKey: string): Promise<FileMetadata | null>;
   exists(storageKey: string): Promise<boolean>;
+  getStream?(storageKey: string): Promise<NodeJS.ReadableStream>;
 }

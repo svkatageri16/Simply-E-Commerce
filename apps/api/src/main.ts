@@ -89,10 +89,64 @@ async function bootstrap() {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   });
 
+  const configuredOrigins = new Set<string>();
+  const addOrigins = (raw?: string) => {
+    if (!raw) return;
+    const items = raw.split(',').map((s) => s.trim().replace(/\/+$/, '')).filter(Boolean);
+    for (const item of items) configuredOrigins.add(item);
+  };
+  addOrigins(process.env.CORS_ALLOWED_ORIGINS);
+  addOrigins(process.env.STOREFRONT_PUBLIC_URL);
+  addOrigins(process.env.STOREFRONT_BASE_URL);
+  addOrigins(process.env.STOREFRONT_URL);
+  addOrigins(process.env.SELLER_PUBLIC_URL);
+  addOrigins(process.env.SELLER_URL);
+  addOrigins(process.env.ADMIN_URL);
+
   await app.register(fastifyCors as any, {
-    origin: true,
+    origin: (origin: string, cb: (err: Error | null, allow: boolean) => void) => {
+      if (!origin) return cb(null, true);
+
+      // Local development and test: allow localhost and loopback on any port
+      if (process.env.NODE_ENV !== 'production') {
+        if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin)) {
+          return cb(null, true);
+        }
+      }
+
+      // Explicitly configured origins from environment
+      if (configuredOrigins.has(origin)) {
+        return cb(null, true);
+      }
+
+      // Recognized production and platform deployment origins
+      if (
+        /^https:\/\/(?:[a-zA-Z0-9-]+\.)*letzshop\.store$/i.test(origin) ||
+        /^https:\/\/(?:[a-zA-Z0-9-]+\.)*railway\.app$/i.test(origin) ||
+        /^https:\/\/(?:[a-zA-Z0-9-]+\.)*vercel\.app$/i.test(origin)
+      ) {
+        return cb(null, true);
+      }
+
+      if (process.env.NODE_ENV === 'production') {
+        return cb(new Error(`CORS blocked for origin: ${origin}`), false);
+      }
+
+      return cb(null, true);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'x-request-id',
+      'idempotency-key',
+      'x-tenant-id',
+      'x-store-id',
+    ],
   });
 
   await app.register(fastifyCookie as any, {

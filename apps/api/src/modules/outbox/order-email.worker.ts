@@ -14,8 +14,8 @@ export class OrderEmailWorker implements OnModuleInit, OnModuleDestroy {
     if (process.env.NOTIFICATION_WORKER_ENABLED === 'false' || process.env.NODE_ENV === 'test') return;
     if (process.env.NODE_ENV === 'production') {
       if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !(process.env.SMTP_PASSWORD || process.env.SMTP_PASS)) throw new Error('Production order email requires SMTP_HOST, SMTP_USER and SMTP_PASSWORD.');
-      const origin = process.env.STOREFRONT_BASE_URL || process.env.STOREFRONT_URL;
-      if (!origin || new URL(origin).protocol !== 'https:') throw new Error('Production email requires an HTTPS STOREFRONT_BASE_URL.');
+      const origin = process.env.STOREFRONT_PUBLIC_URL || process.env.STOREFRONT_BASE_URL || process.env.STOREFRONT_URL;
+      if (!origin || new URL(origin).protocol !== 'https:') throw new Error('Production email requires an HTTPS STOREFRONT_PUBLIC_URL.');
     }
     this.timer = setInterval(() => void this.tick(), 5000);
     this.timer.unref();
@@ -34,7 +34,7 @@ export class OrderEmailWorker implements OnModuleInit, OnModuleDestroy {
     const snapshot = order.deliveryAddress as any;
     const email = order.buyerEmail || snapshot?.email || order.customer?.email;
     if (!email || !await this.mail.verifyTransport()) throw new Error('Order email delivery unavailable.');
-    const origin = process.env.STOREFRONT_BASE_URL || process.env.STOREFRONT_URL || 'http://localhost:3000';
+    const origin = process.env.STOREFRONT_PUBLIC_URL || process.env.STOREFRONT_BASE_URL || process.env.STOREFRONT_URL || 'http://localhost:3000';
     const ctx: OrderEmailContext = {
       order: { ...order, status }, store: { id: order.storeId, name: order.store.name, supportEmail: order.store.supportEmail || undefined, supportPhone: order.store.supportPhone || undefined },
       customer: { email, fullName: order.buyerName || snapshot?.fullName || order.customer.fullName, phone: snapshot?.phone || order.customer.phone },

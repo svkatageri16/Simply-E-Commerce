@@ -168,7 +168,9 @@ export function resolveMediaUrl(url?: string | null): string {
   if (typeof process !== 'undefined' && process.env) {
     configuredOrigin =
       process.env.NEXT_PUBLIC_MEDIA_URL ||
+      process.env.STORAGE_PUBLIC_BASE_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
+      process.env.MEDIA_PUBLIC_URL_PREFIX ||
       '';
   }
 

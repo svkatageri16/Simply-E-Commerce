@@ -1,13 +1,19 @@
 const path = require('node:path');
 const fs = require('node:fs');
 
-// Load root .env if present
 const rootDir = path.resolve(__dirname, '../../..');
 const envPath = path.resolve(rootDir, '.env');
-if (fs.existsSync(envPath) && typeof process.loadEnvFile === 'function') {
-  try {
-    process.loadEnvFile(envPath);
-  } catch {}
+if (fs.existsSync(envPath)) {
+  const content = fs.readFileSync(envPath, 'utf8');
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+      const idx = trimmed.indexOf('=');
+      const key = trimmed.slice(0, idx).trim();
+      const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+      if (!process.env[key]) process.env[key] = val;
+    }
+  }
 }
 
 // 1. Force NODE_ENV to 'test'

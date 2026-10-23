@@ -9,6 +9,9 @@ import { TenantGuard } from '../../src/common/guards/tenant.guard';
 import { TenantAccessDeniedException } from '../../src/common/exceptions/domain.exceptions';
 import { SEED_IDS } from '@simply/db';
 import { TenantContext, UserRole } from '@simply/types';
+import { ShippingService } from '../../src/modules/shipping/shipping.service';
+import { MailService } from '../../src/modules/notifications/mail.service';
+import { WhatsAppService } from '../../src/modules/notifications/whatsapp.service';
 
 describe('Multi-Tenancy Security & Tenant Isolation Tests', () => {
   let prisma: PrismaClient;
@@ -48,6 +51,9 @@ describe('Multi-Tenancy Security & Tenant Isolation Tests', () => {
         InventoryService,
         SubscriptionVisibilityService,
         TenantGuard,
+        { provide: ShippingService, useValue: {} },
+        { provide: MailService, useValue: {} },
+        { provide: WhatsAppService, useValue: {} },
         { provide: PrismaClient, useValue: prisma },
       ],
     }).compile();

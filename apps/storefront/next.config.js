@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: process.env.NEXT_OUTPUT_STANDALONE === 'true' ? 'standalone' : undefined,
   // Bound static-generation workers on development/CI machines with limited commit memory.
   experimental: { cpus: 1 },
   transpilePackages: ['@simply/ui', '@simply/api-contracts', '@simply/types', '@simply/config'],
@@ -17,7 +18,7 @@ const nextConfig = {
     return config;
   },
   async rewrites() {
-    const apiUrl = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/+$/, '');
+    const apiUrl = (process.env.API_URL || process.env.API_PUBLIC_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/+$/, '');
     return [
       {
         source: '/api/v1/:path*',

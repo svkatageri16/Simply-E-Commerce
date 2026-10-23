@@ -148,6 +148,14 @@ export class LocalDiskStorageProvider implements StorageProvider {
     return fs.existsSync(absolutePath);
   }
 
+  public async getStream(storageKey: string): Promise<NodeJS.ReadableStream> {
+    const absolutePath = this.resolvePath(storageKey);
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error(`File not found: ${storageKey}`);
+    }
+    return fs.createReadStream(absolutePath);
+  }
+
   private resolvePath(storageKey: string): string {
     const safeKey = storageKey.replace(/^[\/\\]+/, '');
     const absolutePath = path.resolve(this.rootDir, safeKey);
