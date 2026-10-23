@@ -118,7 +118,7 @@ export class MediaService {
       data: {
         tenantId: tenant.tenantId,
         storeId: tenant.storeId,
-        storageProvider: 'LOCAL',
+        storageProvider: this.storageProvider.kind || 'LOCAL',
         storageKey: uploadResult.storageKey,
         publicUrl: uploadResult.publicUrl,
         fileName: safeFilename,

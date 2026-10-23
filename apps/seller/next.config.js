@@ -12,10 +12,15 @@ const nextConfig = {
     return config;
   },
   async rewrites() {
+    const apiUrl = (process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/+$/, '');
     return [
       {
         source: '/api/v1/:path*',
-        destination: 'http://localhost:4000/:path*',
+        destination: `${apiUrl}/:path*`,
+      },
+      {
+        source: '/media/:path*',
+        destination: `${apiUrl}/media/:path*`,
       },
     ];
   },

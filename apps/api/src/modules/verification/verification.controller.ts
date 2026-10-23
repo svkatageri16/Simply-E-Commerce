@@ -83,7 +83,7 @@ export class VerificationController {
     res.header('Cache-Control', 'private, no-store');
 
     const stream = fs.createReadStream(filePath);
-    return res.send(stream);
+    return stream.pipe(res);
   }
 
   @ApiBearerAuth()
@@ -103,6 +103,6 @@ export class VerificationController {
     res.header('Cache-Control', 'private, no-store');
 
     const stream = fs.createReadStream(filePath);
-    return res.send(stream);
+    return stream.pipe(res);
   }
 }

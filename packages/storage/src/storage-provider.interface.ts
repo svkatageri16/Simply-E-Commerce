@@ -23,6 +23,7 @@ export interface FileMetadata {
 }
 
 export interface StorageProvider {
+  readonly kind?: 'LOCAL' | 'S3';
   upload(input: UploadFileInput): Promise<UploadFileResult>;
   delete(storageKey: string): Promise<boolean>;
   getUrl(storageKey: string): string;

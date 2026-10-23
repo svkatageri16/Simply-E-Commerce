@@ -38,6 +38,7 @@ const EXTENSION_MAP: Record<string, string> = {
 };
 
 export class LocalDiskStorageProvider implements StorageProvider {
+  public readonly kind = 'LOCAL' as const;
   private readonly rootDir: string;
   private readonly publicUrlPrefix: string;
   private readonly maxSizeBytes: number;

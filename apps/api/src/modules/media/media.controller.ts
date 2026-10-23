@@ -171,8 +171,12 @@ export class MediaController {
     const stream = fs.createReadStream(responsePath);
     res.header('Cache-Control', 'public, max-age=86400');
     res.header('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.header('Access-Control-Allow-Origin', '*');
-    return res.send(stream);
+    stream.on('error', (err) => {
+      if (!res.headersSent) {
+        res.status(404).send('Not Found');
+      }
+    });
+    return stream.pipe(res);
   }
 
   @Public()

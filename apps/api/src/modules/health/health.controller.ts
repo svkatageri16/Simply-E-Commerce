@@ -129,16 +129,16 @@ export class HealthController {
       await this.prisma.$queryRaw`SELECT 1;`;
       checks.database = 'UP';
     } catch (err: any) {
-      checks.database = `DOWN: ${err.message}`;
+      checks.database = 'DOWN';
       isReady = false;
     }
 
     // Check 2: Storage Availability
     try {
-      await this.storageProvider.exists('health-check-probe.tmp');
+      await this.storageProvider.exists('health/probe/products/readiness.jpg');
       checks.storage = 'UP';
     } catch (err: any) {
-      checks.storage = `DOWN: ${err.message}`;
+      checks.storage = 'DOWN';
       isReady = false;
     }
 

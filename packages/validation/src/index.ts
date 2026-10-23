@@ -163,6 +163,24 @@ export function resolveMediaUrl(url?: string | null): string {
     return '';
   }
 
+  // Determine media / API origin
+  let configuredOrigin = '';
+  if (typeof process !== 'undefined' && process.env) {
+    configuredOrigin =
+      process.env.NEXT_PUBLIC_MEDIA_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      '';
+  }
+
+  // If URL has localhost or 127.0.0.1 and configuredOrigin is set and not localhost, rebase to production origin
+  if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/(.*)$/i.test(trimmed)) {
+    if (configuredOrigin && !/localhost|127\.0\.0\.1/i.test(configuredOrigin)) {
+      const path = trimmed.replace(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/?/i, '');
+      const cleanOrigin = configuredOrigin.replace(/\/+$/, '');
+      return `${cleanOrigin}/${path}`;
+    }
+  }
+
   // Absolute protocol URLs or protocol-relative URLs
   if (/^(?:https?:)?\/\//i.test(trimmed)) {
     return trimmed;
@@ -173,13 +191,12 @@ export function resolveMediaUrl(url?: string | null): string {
     return trimmed;
   }
 
-  // Determine media / API origin
-  let configuredOrigin = '';
-  if (typeof process !== 'undefined' && process.env) {
-    configuredOrigin =
-      process.env.NEXT_PUBLIC_MEDIA_URL ||
-      process.env.NEXT_PUBLIC_API_URL ||
-      '';
+  // Strip machine-specific Windows/local drive letters
+  let cleanPath = trimmed;
+  if (/^(?:file:\/\/\/?)?[a-zA-Z]:[\\/]/i.test(trimmed)) {
+    const fsNormalized = trimmed.replace(/^(?:file:\/\/\/?)?[a-zA-Z]:[\\/]/i, '').replace(/\\/g, '/');
+    const mediaRelMatch = fsNormalized.match(/(?:media-storage|media\/file|media)\/(.+)$/);
+    cleanPath = mediaRelMatch ? `media/file/${mediaRelMatch[1]}` : fsNormalized;
   }
 
   if (!configuredOrigin) {
@@ -187,7 +204,7 @@ export function resolveMediaUrl(url?: string | null): string {
   }
 
   const cleanOrigin = configuredOrigin.replace(/\/+$/, '');
-  const cleanPath = trimmed.replace(/^\/+/, '');
+  cleanPath = cleanPath.replace(/^\/+/, '');
 
   return `${cleanOrigin}/${cleanPath}`;
 }
