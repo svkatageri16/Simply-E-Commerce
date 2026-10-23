@@ -249,7 +249,7 @@ export class WhatsAppService {
         });
 
         if (response.ok) {
-          this.logger.log(`[WHATSAPP CLOUD API] Message delivered directly to +${cleanTo}`);
+          this.logger.log(`[WHATSAPP CLOUD API] Message accepted by provider`);
           return true;
         } else {
           const errData = await response.text();
@@ -279,11 +279,8 @@ export class WhatsAppService {
       }
     }
 
-    // Option 3: Development / Headless Mode (Server-side direct automated dispatch)
-    this.logger.log(
-      `[DIRECT WHATSAPP DISPATCH] To: +${cleanTo} | Automated Direct Message:\n${text}`
-    );
-    return true;
+    this.logger.log('[WHATSAPP] No automatic messaging provider configured; use the explicit deep link.');
+    return false;
   }
 
   /**
