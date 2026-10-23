@@ -1,5 +1,5 @@
 import { IsNotEmpty, IsString, IsOptional, IsEmail, Matches, ValidateNested, IsInt, Min, Max, IsArray, ArrayMinSize, ArrayMaxSize } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { INDIAN_PHONE_REGEX, INDIAN_PINCODE_REGEX } from '@simply/validation';
 
@@ -48,6 +48,8 @@ export class DirectCheckoutItemDto {
 }
 
 export class GuestCheckoutDto {
+  @IsOptional() @IsString() @Matches(/^[a-zA-Z0-9_-]{16,100}$/)
+  checkoutKey?: string;
   @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(1)
   @ValidateNested({ each: true }) @Type(() => DirectCheckoutItemDto)
   directItems?: DirectCheckoutItemDto[];
@@ -73,10 +75,11 @@ export class GuestCheckoutDto {
   @Matches(INDIAN_PHONE_REGEX, { message: 'Must be a valid 10-digit Indian phone number' })
   phone: string;
 
-  @ApiPropertyOptional({ example: 'rohan.mehta@example.com' })
-  @IsOptional()
+  @ApiProperty({ example: 'rohan.mehta@example.com' })
+  @Transform(({ value }) => typeof value === 'string' ? value.trim().toLowerCase() : value)
+  @IsNotEmpty()
   @IsEmail()
-  email?: string;
+  email: string;
 
   @ApiPropertyOptional({ type: CheckoutAddressDto })
   @IsOptional()

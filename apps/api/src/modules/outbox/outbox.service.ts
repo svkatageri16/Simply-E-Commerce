@@ -6,6 +6,10 @@ export class OutboxService {
   private readonly logger = new Logger(OutboxService.name);
 
   constructor(private readonly prisma: PrismaClient) {}
+  private readonly handlers = new Map<string, (event: any) => Promise<void>>();
+  public registerHandler(eventType: string, handler: (event: any) => Promise<void>) {
+    this.handlers.set(eventType, handler);
+  }
 
   public async emitEvent(
     eventType: string,
@@ -33,14 +37,18 @@ export class OutboxService {
    * never block customer payment transactions or lose events.
    */
   public async processPendingEvents(limit = 10): Promise<{ processed: number; failed: number }> {
+    if (!this.handlers.size) return { processed: 0, failed: 0 };
     const now = new Date();
 
     const pendingEvents = await this.prisma.outboxEvent.findMany({
       where: {
-        status: OutboxStatus.PENDING,
-        OR: [{ nextRetryAt: null }, { nextRetryAt: { lte: now } }],
+        eventType: { in: [...this.handlers.keys()] },
+        OR: [
+          { status: OutboxStatus.PENDING, OR: [{ nextRetryAt: null }, { nextRetryAt: { lte: now } }] },
+          { status: OutboxStatus.PROCESSING, nextRetryAt: { lte: now } },
+        ],
       },
-      take: limit,
+      take: Math.max(1, Math.min(50, limit)),
       orderBy: { createdAt: 'asc' },
     });
 
@@ -49,13 +57,18 @@ export class OutboxService {
 
     for (const event of pendingEvents) {
       try {
-        await this.prisma.outboxEvent.update({
-          where: { id: event.id },
-          data: { status: OutboxStatus.PROCESSING },
+        if (event.retryCount >= event.maxRetries) {
+          await this.prisma.outboxEvent.update({ where: { id: event.id }, data: { status: OutboxStatus.DEAD_LETTER } });
+          continue;
+        }
+        const claimed = await this.prisma.outboxEvent.updateMany({
+          where: { id: event.id, status: event.status, retryCount: event.retryCount, nextRetryAt: event.nextRetryAt },
+          data: { status: OutboxStatus.PROCESSING, retryCount: { increment: 1 }, nextRetryAt: new Date(Date.now() + 60_000) },
         });
+        if (!claimed.count) continue;
 
         // Event handler execution
-        this.logger.log(`[OUTBOX EVENT] Dispatched event: ${event.eventType} (ID: ${event.id})`);
+        await this.handlers.get(event.eventType)!(event);
 
         await this.prisma.outboxEvent.update({
           where: { id: event.id },
@@ -75,16 +88,14 @@ export class OutboxService {
         const backoffSeconds = Math.pow(2, nextRetry) * 10;
         const nextRetryAt = new Date(Date.now() + backoffSeconds * 1000);
 
-        this.logger.error(
-          `[OUTBOX EVENT FAILURE] Event ${event.id} failed attempt ${nextRetry}/${event.maxRetries}. Error: ${err.message}`
-        );
+        this.logger.warn(`[OUTBOX EVENT FAILURE] Event ${event.id} failed attempt ${nextRetry}/${event.maxRetries}.`);
 
         await this.prisma.outboxEvent.update({
           where: { id: event.id },
           data: {
             status: isDeadLetter ? OutboxStatus.DEAD_LETTER : OutboxStatus.PENDING,
             retryCount: nextRetry,
-            lastError: err.message,
+            lastError: 'Delivery failed; retry scheduled where available.',
             nextRetryAt: isDeadLetter ? null : nextRetryAt,
           },
         });

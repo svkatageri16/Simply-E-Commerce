@@ -1,3 +1,4 @@
+import { isEmail } from 'class-validator';
 import {
   Injectable,
   NotFoundException,
@@ -258,6 +259,21 @@ export class OrdersService {
       throw new BadRequestException('Orders cannot be created in merchant preview mode.');
     }
 
+    if (typeof dto.email !== 'string' || !isEmail(dto.email.trim())) throw new BadRequestException('A valid buyer email is required.');
+    dto = { ...dto, email: dto.email.trim().toLowerCase(), fullName: dto.fullName?.trim() };
+    if (!dto.fullName) throw new BadRequestException('Buyer name is required.');
+    const checkoutKey = dto.checkoutKey ? `${dto.storeId}:${dto.checkoutKey}` : undefined;
+    const canonical = (value: any): any => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== undefined).map(key => [key, canonical(value[key])])) : value;
+    const { paymentMethod: _method, checkoutKey: _key, discountPaise: _discount, ...selection } = dto;
+    const checkoutHash = crypto.createHash('sha256').update(JSON.stringify(canonical(selection))).digest('hex');
+    if (checkoutKey) {
+      const existing = await this.prisma.order.findUnique({ where: { checkoutKey } });
+      if (existing) return this.prisma.$transaction(async tx => {
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${existing.id} FOR UPDATE`;
+        return this.replayCheckout(tx, await tx.order.findUniqueOrThrow({ where: { id: existing.id } }), dto, checkoutHash);
+      });
+    }
+
     // 1. Enforce Server-Side Subscription Check: Store MUST be LIVE with active paid subscription
     const { store } = await this.visibilityService.evaluateVisibility(dto.storeId);
 
@@ -353,6 +369,12 @@ export class OrdersService {
 
     // 3. Execute Transaction
     const resultOrder = await this.prisma.$transaction(async (tx) => {
+      if (checkoutKey) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${checkoutKey}, 0))`;
+        const existing = await tx.order.findUnique({ where: { checkoutKey } });
+        if (existing) return this.replayCheckout(tx, existing, dto, checkoutHash);
+      }
+
       // Step A: Concurrency-safe inventory reservation for every item
       for (const item of cart.items) {
         await this.inventoryService.reserveStock(
@@ -487,6 +509,7 @@ export class OrdersService {
           orderNumber,
           trackingToken,
           reviewToken,
+          checkoutKey, checkoutHash, buyerEmail: dto.email, buyerName: dto.fullName,
           status: OrderStatus.NEW,
           paymentStatus: initialPaymentStatus,
           shipmentStatus: ShipmentStatus.PENDING,
@@ -498,11 +521,16 @@ export class OrdersService {
           totalPaise,
           currency: 'INR',
           notes: fullNotes,
-          deliveryAddress: dto.deliveryAddress ? dto.deliveryAddress as any : Prisma.JsonNull,
+          deliveryAddress: { ...dto.deliveryAddress, email: dto.email, fullName: dto.fullName, phone: cleanPhone },
           paymentMethod: isZeroAmount ? 'PROMOTIONAL_CREDIT' : chosenPaymentMethod,
           guestCheckout: true,
         },
       });
+
+      await tx.outboxEvent.upsert({ where: { id: `order-email:${order.id}:NEW` }, update: {}, create: {
+        id: `order-email:${order.id}:NEW`, tenantId: store.tenantId, storeId: store.id,
+        eventType: 'ORDER_EMAIL', payload: { orderId: order.id, status: 'NEW' },
+      } });
 
       // Step E2: Create OrderAddress record snapshot
       if (dto.deliveryAddress) {
@@ -617,9 +645,9 @@ export class OrdersService {
       });
 
       if (fullOrder) {
-        const customerEmail = fullOrder.customer?.email || (fullOrder.deliveryAddress as any)?.email;
+        const customerEmail = fullOrder.buyerEmail || (fullOrder.deliveryAddress as any)?.email || fullOrder.customer?.email;
         const customerPhone = fullOrder.customer?.phone || (fullOrder.deliveryAddress as any)?.phone;
-        const customerName = fullOrder.customer?.fullName || (fullOrder.deliveryAddress as any)?.fullName || 'Customer';
+        const customerName = fullOrder.buyerName || fullOrder.customer?.fullName || (fullOrder.deliveryAddress as any)?.fullName || 'Customer';
         const trackingUrl = fullOrder.trackingToken
           ? `${process.env.STOREFRONT_BASE_URL || process.env.STOREFRONT_URL || 'https://letzshop.com'}/track/${fullOrder.orderNumber}?t=${fullOrder.trackingToken}`
           : undefined;
@@ -640,11 +668,7 @@ export class OrdersService {
           trackingUrl,
         };
 
-        if (customerEmail) {
-          this.mailService.sendOrderPlacedEmail(emailContext).catch((err) => {
-            this.logger.warn(`Failed to send order placed email: ${err.message}`);
-          });
-        }
+        // Buyer confirmation is durably queued in the order transaction.
 
         if (customerPhone) {
           const itemsSummary = (fullOrder.items || [])
@@ -678,6 +702,18 @@ export class OrdersService {
     }
 
     return resultOrder;
+  }
+
+  private async replayCheckout(tx: Prisma.TransactionClient, existing: any, dto: GuestCheckoutDto, hash: string) {
+    if (existing.checkoutHash !== hash || existing.storeId !== dto.storeId) throw new BadRequestException('Checkout details changed. Start a new checkout attempt.');
+    if (existing.paymentMethod === 'RAZORPAY' && dto.paymentMethod === 'COD' && existing.paymentStatus === 'PENDING' && existing.status === 'NEW') {
+      const account = await tx.merchantPaymentAccount.findFirst({ where: { storeId: existing.storeId } });
+      const settings = account?.capabilities as any;
+      if (settings?.codEnabled === false) throw new BadRequestException('Cash on Delivery is disabled.');
+      await tx.paymentOrder.updateMany({ where: { orderId: existing.id, status: 'PENDING' }, data: { status: 'FAILED' } });
+      return tx.order.update({ where: { id: existing.id }, data: { paymentMethod: 'COD' } });
+    }
+    return existing;
   }
 
   public async getOrderById(orderId: string, tenant?: TenantContext) {
@@ -732,6 +768,7 @@ export class OrdersService {
       null;
 
     const customerEmail =
+      order.buyerEmail ||
       order.customer?.email ||
       deliveryAddress.email ||
       null;
@@ -1062,6 +1099,7 @@ export class OrdersService {
         null;
 
       const customerEmail =
+        o.buyerEmail ||
         o.customer?.email ||
         deliveryAddress.email ||
         null;
@@ -1335,6 +1373,10 @@ export class OrdersService {
         },
       });
 
+      await tx.outboxEvent.upsert({ where: { id: `order-email:${updated.id}:${toStatus}` }, update: {}, create: {
+        id: `order-email:${updated.id}:${toStatus}`, tenantId: tenant.tenantId, storeId: tenant.storeId,
+        eventType: 'ORDER_EMAIL', payload: { orderId: updated.id, status: toStatus, customMessage },
+      } });
       return updated;
     });
 
@@ -1364,9 +1406,9 @@ export class OrdersService {
 
       const store = fullOrder.store;
       const deliveryAddress = (fullOrder.deliveryAddress as any) || fullOrder.orderAddress || {};
-      const customerEmail = fullOrder.customer?.email || deliveryAddress.email;
+      const customerEmail = fullOrder.buyerEmail || deliveryAddress.email || fullOrder.customer?.email;
       const customerPhone = fullOrder.customer?.phone || deliveryAddress.phone;
-      const customerName = fullOrder.customer?.fullName || deliveryAddress.fullName || 'Valued Customer';
+      const customerName = fullOrder.buyerName || fullOrder.customer?.fullName || deliveryAddress.fullName || 'Valued Customer';
       const trackingUrl = fullOrder.trackingToken
         ? buildPublicTrackingUrl(fullOrder.orderNumber, fullOrder.trackingToken)
         : undefined;
@@ -1444,16 +1486,7 @@ export class OrdersService {
         customMessage,
       };
 
-      // --- A. NOTIFY BUYER VIA EMAIL ---
-      if (customerEmail) {
-        if (toStatus === OrderStatus.DISPATCHED) {
-          await this.mailService.sendOrderDispatchedEmail(emailContext);
-        } else if (toStatus === OrderStatus.COMPLETED) {
-          await this.mailService.sendOrderDeliveredEmail(emailContext);
-        } else {
-          await this.mailService.sendOrderStatusUpdateEmail(emailContext, toStatus);
-        }
-      }
+      // Buyer status/review emails are durably queued with the status transaction.
 
       // --- B. NOTIFY BUYER VIA WHATSAPP ---
       const itemsSummary = (fullOrder.items || [])
