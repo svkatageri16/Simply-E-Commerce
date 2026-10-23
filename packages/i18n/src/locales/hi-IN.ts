@@ -835,6 +835,7 @@ export const hiIN: TranslationDictionary = {
     themeStudioDesc: 'रंग, लोगो और स्टोर लेआउट कस्टमाइज़ करें',
   },
   subscription: {
+    billingProfileRequired: 'सदस्यता लेने से पहले व्यवसाय का नाम, बिलिंग पता, राज्य, PIN कोड और बिलिंग ईमेल भरकर सहेजें। GSTIN वैकल्पिक है।',
     title: 'स्टोर पब्लिशिंग और सब्सक्रिप्शन',
     subtitle: 'बिना किसी छिपे शुल्क के पारदर्शी मूल्य निर्धारण। अपनी बिक्री का 100% राजस्व अपने पास रखें।',
     choosePlanTitle: 'मर्चेंट प्लान चुनें',
@@ -968,6 +969,13 @@ export const hiIN: TranslationDictionary = {
   },
   landing: {
     ...enIN.landing,
+    launchStepsTitle: "५ आसान चरणों में बिक्री शुरू करें",
+    launchStep3Title: "अपनी योजना सक्रिय करें",
+    launchStep3Desc: "पैकेज चुनें और सत्यापित भुगतान से सक्रिय करें।",
+    launchStep4Title: "स्टोर साझा करें और बिक्री शुरू करें",
+    launchStep4Desc: "ग्राहकों को उत्पाद देखने और ऑर्डर करने के लिए स्टोर लिंक या QR कोड साझा करें।",
+    launchStep5Title: "अपना व्यवसाय संभालें",
+    launchStep5Desc: "ऑर्डर, स्टॉक, ग्राहक संदेश, डिलीवरी और समीक्षाएं संभालें।",
     customerJourney: customerJourneyHi,
     brandCapLayout: 'होम और कैटलॉग का लेआउट',
     themeGallery: {

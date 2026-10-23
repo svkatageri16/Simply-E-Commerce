@@ -833,6 +833,7 @@ export const enIN = {
     themeStudioDesc: 'Customize colors, logo, and store layout',
   },
   subscription: {
+    billingProfileRequired: 'Complete and save your business name, billing address, state, PIN code and billing email before subscribing. GSTIN is optional.',
     title: 'Store Publishing & Subscription',
     subtitle: 'Transparent pricing with zero hidden commissions. Keep 100% of your customer revenue.',
     choosePlanTitle: 'Choose a Merchant Plan',
@@ -965,6 +966,13 @@ export const enIN = {
     errMaxPercent: 'Percentage discount cannot exceed 100%.',
   },
   landing: {
+    launchStepsTitle: "Start selling in 5 simple steps",
+    launchStep3Title: "Activate your plan",
+    launchStep3Desc: "Choose your package and activate it with a verified payment.",
+    launchStep4Title: "Share your store and start selling",
+    launchStep4Desc: "Share your store link or QR code so customers can browse and order.",
+    launchStep5Title: "Manage your business",
+    launchStep5Desc: "Manage orders, stock, customer updates, delivery and reviews.",
     customerJourney: customerJourneyEn,
     themeGallery: {
       eyebrow: 'STOREFRONT THEMES',

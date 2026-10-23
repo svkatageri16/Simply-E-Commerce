@@ -835,6 +835,7 @@ export const mrIN: TranslationDictionary = {
     themeStudioDesc: 'रंग, लोगो आणि स्टोअर लेआउट सानुकूलित करा',
   },
   subscription: {
+    billingProfileRequired: 'सबस्क्रिप्शन घेण्यापूर्वी व्यवसायाचे नाव, बिलिंग पत्ता, राज्य, PIN कोड आणि बिलिंग ईमेल भरून जतन करा. GSTIN ऐच्छिक आहे.',
     title: 'स्टोअर पब्लिशिंग आणि सबस्क्रिप्शन',
     subtitle: 'कोणत्याही लपविलेल्या शुल्काशिवाय पारदर्शक किंमत. तुमच्या विक्रीचा १००% महसूल तुमच्याकडे ठेवा.',
     choosePlanTitle: 'व्यापारी प्लॅन निवडा',
@@ -967,6 +968,13 @@ export const mrIN: TranslationDictionary = {
     errMaxPercent: 'टक्केवारी सवलत १००% पेक्षा जास्त असू शकत नाही.',
   },
   landing: {
+    launchStepsTitle: "५ सोप्या चरणांत विक्री सुरू करा",
+    launchStep3Title: "तुमची योजना सक्रिय करा",
+    launchStep3Desc: "पॅकेज निवडा आणि सत्यापित पेमेंट करून ते सक्रिय करा.",
+    launchStep4Title: "स्टोअर शेअर करा व विक्री सुरू करा",
+    launchStep4Desc: "ग्राहकांना उत्पादने पाहण्यासाठी व ऑर्डर करण्यासाठी स्टोअर लिंक किंवा QR कोड शेअर करा.",
+    launchStep5Title: "व्यवसाय सांभाळा",
+    launchStep5Desc: "ऑर्डर, साठा, ग्राहक संदेश, वितरण आणि अभिप्राय सांभाळा.",
     customerJourney: customerJourneyMr,
     themeGallery: {
       eyebrow: 'ऑनलाइन स्टोअर थीम्स',

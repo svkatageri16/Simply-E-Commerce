@@ -7,6 +7,7 @@ import { IndianPhoneInput } from '../components/IndianPhoneInput';
 import { isValidIndianPhone, isValidPin } from '@simply/validation';
 import { ThemeToggle } from '../components/ui/MerchantUi';
 import { useActionNotification } from '../hooks/useActionNotification';
+import { AikyamGlobalFooter } from '../components/AikyamGlobalFooter';
 
 type AuthMode =
   | 'PIN_LOGIN'
@@ -879,6 +880,7 @@ export default function LoginPage({ initialMode }: { initialMode?: AuthMode } = 
           )}
         </div>
       </div>
+      <AikyamGlobalFooter />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { errorMessage } from '../components/AdminUI';
 import { ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { AdminThemeToggle } from '../context/AdminThemeContext';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { AikyamGlobalFooter } from '../components/AikyamGlobalFooter';
 export default function Login() {
   const { login } = useAdminAuth();
   const [identifier, setIdentifier] = useState(''),
@@ -92,6 +93,7 @@ export default function Login() {
           </form>
         </div>
       </main>
+      <AikyamGlobalFooter />
     </>
   );
 }
