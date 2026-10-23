@@ -34,10 +34,10 @@ export const Screen7Pricing: React.FC<{ sellerUrl: string; initialPlan: LaunchPl
             <div className={styles.cardTop}><span>{tr('with')}</span><span className={styles.plan}>{plan?.name || 'Launch'}</span></div>
             <p className={styles.connected}>{tr('connected')}</p>
             <div className={styles.price} data-testid="launch-price" data-price-paise={plan?.pricePaise} data-period-days={plan?.billingPeriodDays}>
-              {price ? <><strong>{price}</strong><span>/ {t('pricingValue.period', { days: new Intl.NumberFormat(locale).format(plan!.billingPeriodDays) })}</span></> : <span>{tr('unavailable')}</span>}
+              {price ? <><strong>{price}</strong><span>{tr('taxSuffix')} / </span><span>{t('pricingValue.period', { days: new Intl.NumberFormat(locale).format(plan!.billingPeriodDays) })}</span></> : <span>{tr('unavailable')}</span>}
             </div>
             <ul className={styles.features}>{Array.from({ length: 9 }, (_, i) => <li key={i}><Check size={16} aria-hidden="true" /><span>{tr(`f${i + 1}`)}</span></li>)}</ul>
-            <a data-testid="pricing-cta" href={`${sellerUrl}/login?mode=register`} className={styles.cta}>{tr('cta')}<ArrowRight size={18} /></a>
+            <a data-testid="pricing-cta" href={`${sellerUrl}/register`} className={styles.cta}>{tr('cta')}<ArrowRight size={18} /></a>
             <a className={styles.how} href={`#${LANDING_ANCHORS.journey}`}>{tr('how')} <span aria-hidden="true">↗</span></a>
           </div>
         </div>

@@ -9,7 +9,6 @@ import { Screen2Problem } from '../components/landing/Screen2Problem';
 import { Screen3System } from '../components/landing/Screen3System';
 import { Screen4Categories } from '../components/landing/Screen4Categories';
 import { Screen5CustomerJourney } from '../components/landing/Screen5CustomerJourney';
-import { Screen6BrandStudio } from '../components/landing/Screen6BrandStudio';
 import { Screen7Pricing } from '../components/landing/Screen7Pricing';
 import { Screen8StepsFaqCta } from '../components/landing/Screen8StepsFaqCta';
 import { LandingFooter } from '../components/landing/LandingFooter';
@@ -69,10 +68,7 @@ function LandingPageInner({ initialSellerUrl, sellerOriginConfigured, initialLau
         {/* Screen 5: Customer Visit to Delivery */}
         <Screen5CustomerJourney />
 
-        {/* Screen 6: Brand Studio / Make It Yours (Interactive Canonical Themes) */}
-        <Screen6BrandStudio sellerUrl={sellerUrl} />
-
-        {/* Screen 7: Value + ₹999 */}
+        {/* Pricing replaces the former Brand Studio landing position. */}
         <Screen7Pricing sellerUrl={sellerUrl} initialPlan={initialLaunchPlan} />
 
         {/* Screen 8: How It Works + FAQ + Final CTA */}

@@ -144,7 +144,7 @@ export const Screen8StepsFaqCta: React.FC<Screen8StepsFaqCtaProps> = ({ sellerUr
 
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
               <a
-                href={`${sellerUrl}/login?mode=register`}
+                href={`${sellerUrl}/register`}
                 className="w-full sm:w-auto px-8 py-4 rounded-xl bg-white hover:bg-slate-100 text-slate-950 text-xs font-black uppercase tracking-wider transition shadow-xl flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
               >
                 <span>{t('landing.finalCtaCreate')}</span>

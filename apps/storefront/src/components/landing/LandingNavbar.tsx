@@ -99,7 +99,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ sellerUrl }) => {
 
           {/* Primary Action: Create Store */}
           <a
-            href={`${sellerUrl}/login?mode=register`}
+            href={`${sellerUrl}/register`}
             className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white rounded-full text-xs font-bold transition-all shadow-md shadow-orange-500/20 hover:shadow-orange-500/30 flex items-center gap-1.5 active:scale-[0.98]"
           >
             <span>{t('landing.createStore')}</span>
@@ -180,7 +180,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ sellerUrl }) => {
               {t('landing.merchantLogin')}
             </a>
             <a
-              href={`${sellerUrl}/login?mode=register`}
+              href={`${sellerUrl}/register`}
               className="w-full text-center py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold shadow-sm hover:bg-blue-700 transition flex items-center justify-center gap-1.5"
             >
               <span>{t('landing.createStore')}</span>

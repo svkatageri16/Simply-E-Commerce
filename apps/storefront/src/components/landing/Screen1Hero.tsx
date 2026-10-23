@@ -74,7 +74,7 @@ export const Screen1Hero: React.FC<Screen1HeroProps> = ({ sellerUrl }) => {
             <div className="space-y-3 pt-1">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
                 <a
-                  href={`${sellerUrl}/login?mode=register`}
+                  href={`${sellerUrl}/register`}
                   id="hero-cta-create-store"
                   className="h-13 sm:h-[56px] px-8 sm:px-9 rounded-[16px] bg-[#FF6B00] hover:bg-[#E05E00] text-white font-extrabold text-sm uppercase tracking-wider transition-all shadow-xl shadow-orange-500/30 hover:shadow-orange-500/40 flex items-center justify-center gap-2.5 active:scale-[0.98]"
                 >

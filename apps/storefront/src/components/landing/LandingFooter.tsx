@@ -77,7 +77,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ sellerUrl }) => {
             </p>
             <ul className="space-y-2 text-slate-600">
               <li>
-                <a href={`${sellerUrl}/login?mode=register`} className="hover:text-blue-600 transition font-semibold text-blue-700">
+                <a href={`${sellerUrl}/register`} className="hover:text-blue-600 transition font-semibold text-blue-700">
                   {t('landing.createStore')}
                 </a>
               </li>
