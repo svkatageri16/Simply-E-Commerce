@@ -17,8 +17,8 @@ type AuthMode =
   | 'RECOVERY_VERIFY'
   | 'RECOVERY_PIN';
 
-export default function LoginPage() {
-  const [mode, setMode] = useState<AuthMode>('PIN_LOGIN');
+export default function LoginPage({ initialMode }: { initialMode?: AuthMode } = {}) {
+  const [mode, setMode] = useState<AuthMode>(initialMode || 'PIN_LOGIN');
   const [phone, setPhone] = useState('');
   const [registrationEmail, setRegistrationEmail] = useState('');
   const [maskedEmail, setMaskedEmail] = useState('');
@@ -58,10 +58,10 @@ export default function LoginPage() {
   }, [authLoading, user, store, router]);
 
   useEffect(() => {
-    if (router.query.mode === 'register') {
-      setMode('REGISTER_OTP');
-    }
-  }, [router.query.mode]);
+    if (!router.isReady) return;
+    setMode(router.pathname === '/register' || router.query.mode === 'register'
+      ? 'REGISTER_OTP' : router.query.mode === 'recovery' ? 'RECOVERY_OTP' : 'PIN_LOGIN');
+  }, [router.isReady, router.pathname, router.query.mode]);
 
   // Clean PIN state on mode change
   const resetFormState = (newMode: AuthMode) => {
@@ -74,6 +74,8 @@ export default function LoginPage() {
     setShowConfirmPin(false);
     setShowLoginPin(false);
     setMode(newMode);
+    const destination = newMode === 'PIN_LOGIN' ? '/login' : newMode.startsWith('REGISTER') ? '/register' : '/login?mode=recovery';
+    if (router.asPath !== destination) void router.replace(destination, undefined, { shallow: true });
   };
 
   const switchToPinLogin = () => {
@@ -319,7 +321,7 @@ export default function LoginPage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md px-4">
         {/* Brand Logo & Header */}
         <div className="text-center">
-          <a href={homeUrl} aria-label="Back to LetzShop home" className="inline-flex items-center justify-center rounded-xl bg-white p-2 mb-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
+          <a href={homeUrl} aria-label="Go to LetzShop home" className="inline-flex items-center justify-center rounded-xl bg-white p-2 mb-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4">
             <img src="/images/letzshop-logo.png" alt="LetzShop" width={180} height={64} className="h-12 w-auto object-contain" />
           </a>
           <p className="mt-1 text-sm" style={{ color: 'var(--merchant-text-muted)' }}>
