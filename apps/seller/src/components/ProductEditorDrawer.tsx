@@ -34,6 +34,8 @@ interface OptionTypeDraft {
 }
 
 interface VariantDraft {
+  priceOverridden?: boolean;
+  stockOverridden?: boolean;
   id?: string;
   title: string;
   optionValues: Record<string, string>;
@@ -126,9 +128,9 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
   const [mode, setMode] = useState<
     'SELL_ONLINE' | 'ENQUIRY_ONLY' | 'SELL_AND_ENQUIRY'
   >('SELL_ONLINE');
-  const [basePriceRupees, setBasePriceRupees] = useState('799');
+  const [basePriceRupees, setBasePriceRupees] = useState('');
   const [comparePriceRupees, setComparePriceRupees] = useState('');
-  const [stock, setStock] = useState('10');
+  const [stock, setStock] = useState('0');
   const [sku, setSku] = useState('');
 
   // Media state (MediaItemDraft with instant blob preview + upload state + canonical publicUrl)
@@ -209,9 +211,9 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
     setShowQuickAddCategory(false);
     setNewCatName('');
     setMode('SELL_ONLINE');
-    setBasePriceRupees('799');
+    setBasePriceRupees('');
     setComparePriceRupees('');
-    setStock('10');
+    setStock('0');
     setSku('');
     setMediaItems([]);
     setUploadingImage(false);
@@ -224,7 +226,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
       { name: 'Size', values: ['S', 'M', 'L'], inputValue: '' },
     ];
     setOptions(initialOpts);
-    generateVariantMatrix(initialOpts, 79900, null, []);
+    setVariants([]);
   };
 
   const loadProduct = async (id: string) => {
@@ -258,7 +260,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
       const compPaise = firstVar?.compareAtPricePaise ?? product.compareAtPricePaise;
       setComparePriceRupees(compPaise ? String(compPaise / 100) : '');
 
-      const initialStock = firstVar?.inventory?.stockOnHand ?? 10;
+      const initialStock = firstVar?.inventory?.stockOnHand ?? 0;
       setStock(String(initialStock));
       setSku(firstVar?.sku || '');
 
@@ -331,6 +333,8 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
 
             const comboTitle = Object.values(optMap).join(' / ') || v.sku;
             return {
+              priceOverridden: true,
+              stockOverridden: true,
               id: v.id,
               title: comboTitle,
               optionValues: optMap,
@@ -420,7 +424,9 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
         sku: '', // Server generates a collision-safe SKU unless the merchant supplies one.
         pricePaise: defaultPricePaise,
         compareAtPaise: defaultComparePaise,
-        inventoryQuantity: Number(stock) || 10,
+        inventoryQuantity: Number(stock) || 0,
+        priceOverridden: false,
+        stockOverridden: false,
         isActive: true,
         mediaAssetId: undefined,
       };
@@ -428,6 +434,18 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
 
     setVariants(newVariants);
   };
+
+  // Only inherited fields follow baseline edits. Loaded and manually edited
+  // variants retain their own values; no option/name/UI change clears overrides.
+  useEffect(() => {
+    const price = basePriceRupees.trim() === '' ? null : parseRupeesToPaise(Number(basePriceRupees));
+    const quantity = Number(stock);
+    setVariants(current => current.map(variant => ({
+      ...variant,
+      pricePaise: variant.priceOverridden ? variant.pricePaise : Number.isFinite(price) ? price : null,
+      inventoryQuantity: variant.stockOverridden ? variant.inventoryQuantity : Number.isInteger(quantity) && quantity >= 0 ? quantity : 0,
+    })));
+  }, [basePriceRupees, stock]);
 
   // Option modification handlers
   const handleAddOptionValue = (optIndex: number) => {
@@ -771,17 +789,17 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
     setVariants((prev) =>
       prev.map((v) => ({
         ...v,
-        pricePaise: basePaise,
+        pricePaise: basePaise, priceOverridden: true,
         compareAtPaise: comparePaise,
       }))
     );
   };
 
-  const handleApplyStockToAll = (qty = 10) => {
+  const handleApplyStockToAll = (qty = Number(stock) || 0) => {
     setVariants((prev) =>
       prev.map((v) => ({
         ...v,
-        inventoryQuantity: qty,
+        inventoryQuantity: qty, stockOverridden: true,
       }))
     );
   };
@@ -1495,7 +1513,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
                       setBasePriceRupees(e.target.value);
                       if (formErrors.price) setFormErrors((prev) => ({ ...prev, price: '' }));
                     }}
-                    placeholder="799.00"
+                    placeholder="0.00"
                     className="w-full pl-7 pr-3 py-2 border border-[var(--merchant-input-border)] bg-[var(--merchant-input-bg)] text-[var(--merchant-text)] focus:border-[var(--merchant-focus-ring)] rounded-xl text-xs sm:text-sm font-mono"
                   />
                 </div>
@@ -1778,6 +1796,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
                                   value={v.pricePaise !== null ? v.pricePaise / 100 : ''}
                                   onChange={(e) => {
                                     const updated = [...variants];
+                                    updated[vIdx].priceOverridden = true;
                                     updated[vIdx].pricePaise = e.target.value
                                       ? parseRupeesToPaise(Number(e.target.value) || 0)
                                       : null;
@@ -1830,6 +1849,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
                                 value={v.inventoryQuantity}
                                 onChange={(e) => {
                                   const updated = [...variants];
+                                  updated[vIdx].stockOverridden = true;
                                   updated[vIdx].inventoryQuantity =
                                     parseInt(e.target.value, 10) || 0;
                                   setVariants(updated);
@@ -1964,6 +1984,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
                                     value={v.pricePaise !== null ? v.pricePaise / 100 : ''}
                                     onChange={(e) => {
                                       const updated = [...variants];
+                                      updated[vIdx].priceOverridden = true;
                                       updated[vIdx].pricePaise = e.target.value
                                         ? parseRupeesToPaise(Number(e.target.value) || 0)
                                         : null;
@@ -2001,6 +2022,7 @@ export const ProductEditorDrawer: React.FC<ProductEditorDrawerProps> = ({
                                   value={v.inventoryQuantity}
                                   onChange={(e) => {
                                     const updated = [...variants];
+                                    updated[vIdx].stockOverridden = true;
                                     updated[vIdx].inventoryQuantity =
                                       parseInt(e.target.value, 10) || 0;
                                     setVariants(updated);
