@@ -1,5 +1,19 @@
 # LetzShop Production Environment Contract
 
+Current launch uses Vercel for seller/storefront and Railway for API/PostgreSQL. Docker/KVM and R2 remain optional future deployment targets.
+
+For Railway filesystem media, attach a persistent volume and set `MEDIA_STORAGE_LOCAL_ROOT` to an absolute directory within `RAILWAY_VOLUME_MOUNT_PATH`. For another persistent mount, declare `MEDIA_PERSISTENT_VOLUME_ROOT` and use a media directory inside it. Without a mounted durable directory, production local storage fails startup. S3/R2 uses the existing object storage configuration below; development can continue using local disk.
+
+Run `pnpm --filter @simply/db migrate` as the Railway pre-deploy command, build storage/shared packages and API, then start with `pnpm --filter @simply/api start:prod`. The compiled entry is `dist/main.js`. Apply migrations before routing traffic to this version; never reset or seed the production database.
+
+Set `NEXT_PUBLIC_API_URL` on both Vercel apps to the deployed HTTPS API address and rebuild. Configure API CORS with the actual Vercel/custom origins. Set `STOREFRONT_PUBLIC_URL` to the actual storefront origin for email tracking/review links.
+
+Subscription GST defaults to 18%; package `gstBasisPoints` is the authoritative configurable rate. Existing plan IDs and active subscriptions remain intact. New invoices snapshot buyer, package, tax and payment details at verified payment time. Configure issuer `AIKYAM_LEGAL_NAME`, `AIKYAM_GSTIN`, `AIKYAM_ADDRESS`, `AIKYAM_STATE`, `AIKYAM_STATE_CODE`, `AIKYAM_SUPPORT_EMAIL` and `AIKYAM_WEBSITE`. An unconfigured issuer GSTIN is never replaced with a fabricated registration number.
+
+Monthly AutoPay uses Razorpay plans and mandates, separately from one-time orders. Configure platform `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` (the existing `RAZORPAY_PLATFORM_*` aliases also work). Subscribe the signed raw-body webhook endpoint `/payments/webhook/razorpay` to `subscription.charged`, payment capture/order paid, failure, and refund events. Mandate authentication alone does not activate access; a captured charge of the agreed amount must be verified server-side. Each provider payment grants one renewal and one immutable invoice. Test this with the configured gateway account before enabling live purchasing.
+
+Order email uses the transactional outbox and retries. Stable Message-ID and exclusive event claims prevent ordinary duplicate sends. SMTP does not support an atomic commit with PostgreSQL: a process crash after provider acceptance but before marking completion can still resend. `DEAD_LETTER` events require operator review/retry. WhatsApp actions are prepared deep links requiring the merchant to press Send unless a real Cloud API is separately configured.
+
 This document defines the canonical environment variables used across the LetzShop platform (API, Storefront, Seller Dashboard, and Shared Packages).
 
 ---

@@ -400,6 +400,7 @@ export class SimplyApiClient {
       endDate?: string;
     }) => this.request('seller/orders', { params }),
     getOrder: (id: string) => this.request(`seller/orders/${id}`),
+    markOutForDelivery: (id: string) => this.request(`orders/${id}/out-for-delivery`, { method: 'POST' }),
     updateStatus: (
       id: string,
       status: string,
@@ -465,6 +466,8 @@ export class SimplyApiClient {
   public subscriptions = {
     getPlans: () => this.request('subscriptions/plans'),
     getCurrent: () => this.request('subscriptions/current'),
+    createAutoPay: (planId: string) => this.request<any>('subscriptions/autopay', { method: 'POST', body: { planId } }),
+    verifyAutoPay: (body: { razorpay_subscription_id: string; razorpay_payment_id: string; razorpay_signature: string }) => this.request('subscriptions/autopay/verify', { method: 'POST', body }),
     createOrder: (planId: string, billingCycle = 'MONTHLY') =>
       this.request('subscriptions/create-order', {
         method: 'POST',
@@ -490,6 +493,19 @@ export class SimplyApiClient {
       }),
     devActivate: (planId: string, durationDays = 30) =>
       this.request('subscriptions/dev-activate', { method: 'POST', body: { planId, durationDays } }),
+    getBillingProfile: () => this.request('subscriptions/billing-profile'),
+    updateBillingProfile: (data: {
+      legalName?: string;
+      gstin?: string;
+      billingAddress?: string;
+      state?: string;
+      pincode?: string;
+      billingEmail?: string;
+    }) =>
+      this.request('subscriptions/billing-profile', {
+        method: 'PUT',
+        body: data,
+      }),
   };
 
   // --- Admin ---
@@ -633,6 +649,11 @@ export class SimplyApiClient {
       maxStorageMb?: number;
       customDomainAllowed?: boolean;
       isPublic?: boolean;
+      gstBasisPoints?: number;
+      status?: 'ACTIVE' | 'COMING_SOON' | 'CONTACT_SALES' | 'INACTIVE';
+      displayOrder?: number;
+      badge?: string;
+      isPurchasable?: boolean;
       highlights?: PlanHighlightItem[];
     }) => this.request('admin/plans', { method: 'POST', body: data }),
     updatePlan: (

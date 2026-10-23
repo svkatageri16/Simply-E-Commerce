@@ -38,6 +38,11 @@ interface PlanFormData {
   code: string;
   description: string;
   priceRupees: number;
+  gstRate: number;
+  status: 'ACTIVE' | 'COMING_SOON' | 'CONTACT_SALES' | 'INACTIVE';
+  displayOrder: number;
+  badge: string;
+  isPurchasable: boolean;
   billingCycle: string;
   availability: 'PURCHASABLE' | 'COMING_SOON' | 'CONTACT';
   maxProducts: number;
@@ -53,6 +58,11 @@ const initialFormData: PlanFormData = {
   code: '',
   description: '',
   priceRupees: 0,
+  gstRate: 18,
+  status: 'ACTIVE',
+  displayOrder: 0,
+  badge: '',
+  isPurchasable: true,
   billingCycle: 'MONTHLY',
   availability: 'PURCHASABLE',
   maxProducts: 100,
@@ -95,6 +105,7 @@ export default function AdminBillingPage() {
 
       // Canonical sort: Numeric prices ascending, Contact/Custom placed strictly last
       const sorted = [...plansRes].sort((a, b) => {
+        if ((a.displayOrder || 0) !== (b.displayOrder || 0)) return (a.displayOrder || 0) - (b.displayOrder || 0);
         const isCustomA = a.availability === 'CONTACT' || a.code === 'CUSTOM' || a.pricePaise <= 0;
         const isCustomB = b.availability === 'CONTACT' || b.code === 'CUSTOM' || b.pricePaise <= 0;
         if (isCustomA && !isCustomB) return 1;
@@ -134,6 +145,11 @@ export default function AdminBillingPage() {
       code: plan.code,
       description: plan.description || '',
       priceRupees: plan.pricePaise / 100,
+      gstRate: (plan.gstBasisPoints ?? 1800) / 100,
+      status: plan.status || 'ACTIVE',
+      displayOrder: plan.displayOrder || 0,
+      badge: plan.badge || '',
+      isPurchasable: plan.isPurchasable !== false,
       billingCycle: plan.billingCycle,
       availability: (plan.availability as any) || (plan.purchasable ? 'PURCHASABLE' : 'COMING_SOON'),
       maxProducts: plan.maxProducts,
@@ -213,6 +229,11 @@ export default function AdminBillingPage() {
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
           pricePaise,
+          gstBasisPoints: Math.round(formData.gstRate * 100),
+          status: formData.status,
+          displayOrder: formData.displayOrder,
+          badge: formData.badge,
+          isPurchasable: formData.isPurchasable,
           billingCycle: formData.billingCycle,
           maxProducts: Number(formData.maxProducts),
           maxStaff: Number(formData.maxStaff),
@@ -231,6 +252,11 @@ export default function AdminBillingPage() {
           code: formData.code.trim() || undefined,
           description: formData.description.trim() || undefined,
           pricePaise,
+          gstBasisPoints: Math.round(formData.gstRate * 100),
+          status: formData.status,
+          displayOrder: formData.displayOrder,
+          badge: formData.badge,
+          isPurchasable: formData.isPurchasable,
           billingCycle: formData.billingCycle,
           maxProducts: Number(formData.maxProducts),
           maxStaff: Number(formData.maxStaff),
@@ -785,6 +811,13 @@ export default function AdminBillingPage() {
                     <ShieldCheck className="w-3.5 h-3.5" />
                     3. Availability
                   </h4>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <label>GST (%)<input aria-label="GST rate" type="number" min="0" max="100" step="0.01" value={formData.gstRate} onChange={e => setFormData({ ...formData, gstRate: Number(e.target.value) })} className="w-full p-2 bg-admin-raised rounded" /></label>
+                    <label>Status<select aria-label="Package status" value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value as PlanFormData['status'] })} className="w-full p-2 bg-admin-raised rounded"><option value="ACTIVE">Active</option><option value="COMING_SOON">Coming Soon</option><option value="CONTACT_SALES">Contact Sales</option><option value="INACTIVE">Inactive</option></select></label>
+                    <label>Display order<input type="number" min="0" value={formData.displayOrder} onChange={e => setFormData({ ...formData, displayOrder: Number(e.target.value) })} className="w-full p-2 bg-admin-raised rounded" /></label>
+                    <label>Badge<input maxLength={50} value={formData.badge} onChange={e => setFormData({ ...formData, badge: e.target.value })} className="w-full p-2 bg-admin-raised rounded" /></label>
+                    <label><input type="checkbox" checked={formData.isPurchasable} onChange={e => setFormData({ ...formData, isPurchasable: e.target.checked })} /> Allow purchase when active</label>
+                  </div>
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-admin-secondary">
                       <input
@@ -795,10 +828,10 @@ export default function AdminBillingPage() {
                         }
                         className="w-4 h-4 text-admin-accent rounded focus:ring-admin-border"
                       />
-                      <span>Publicly Purchasable by Merchants</span>
+                      <span>Visible to merchants</span>
                     </label>
                     <span className="text-[10px] text-admin-muted block pl-6">
-                      Uncheck to make this tier Internal/Hidden. Growth plan remains Coming Soon by backend enforcement.
+                      Hidden, Coming Soon, and Contact Sales packages cannot be purchased.
                     </span>
                   </div>
                 </div>

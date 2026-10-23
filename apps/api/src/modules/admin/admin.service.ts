@@ -351,28 +351,64 @@ export class AdminService {
       });
     }
 
-    return generateInvoicePdfBuffer({
-      invoiceNumber: invoice.invoiceNumber,
-      formattedBaseAmount: invoice.baseAmountPaise == null ? undefined : `INR ${(invoice.baseAmountPaise / 100).toFixed(2)}`,
-      formattedTaxAmount: invoice.taxPaise == null ? undefined : `INR ${(invoice.taxPaise / 100).toFixed(2)}`,
-      gstRate: invoice.gstBasisPoints == null ? undefined : invoice.gstBasisPoints / 100,
-      status: invoice.status,
-      tenantName: invoice.tenant.name,
-      tenantSlug: store?.slug || invoice.tenant.slug,
-      ownerName: owner?.fullName || 'Merchant Seller',
-      ownerPhone: owner?.phone || store?.supportPhone || store?.whatsappNumber || 'Not provided',
-      ownerEmail: owner?.email || store?.supportEmail || 'Not provided',
-      invoiceDate: formatDate(invoice.createdAt),
-      billingPeriod: `${startStr} – ${endStr}`,
-      billingPeriodShort: `${startStr} – ${endStr}`,
-      currency: invoice.currency || 'INR',
-      paymentMethod: payment?.paymentMethod || 'RAZORPAY',
-      paymentReference: payment?.providerPaymentId || 'N/A',
-      paidAtDate: formatDateTime(invoice.paidAt || payment?.createdAt),
-      paymentStatus: payment?.status || invoice.status,
-      planName: invoice.subscription?.plan?.name || 'Launch',
-      formattedAmount: `INR ${amountInRupees}`,
-    });
+    const snapshot = invoice.snapshot as any;
+    const pdfData = snapshot
+      ? {
+          invoiceNumber: snapshot.invoiceNumber || invoice.invoiceNumber,
+          status: snapshot.payment?.status || invoice.status,
+          tenantName: snapshot.merchant?.businessName || 'Not recorded',
+          tenantSlug: snapshot.merchant?.storeSlug || 'Not recorded',
+          ownerName: snapshot.merchant?.contactName || 'Not recorded',
+          ownerPhone: snapshot.merchant?.contactPhone || 'Not recorded',
+          ownerEmail: snapshot.merchant?.billingEmail || 'Not recorded',
+          merchantGstin: snapshot.merchant?.gstin || null,
+          billingAddress: snapshot.merchant?.billingAddress || null,
+          billingState: snapshot.merchant?.state || null,
+          issuerName: snapshot.issuer?.legalName,
+          issuerGstin: snapshot.issuer?.gstin,
+          issuerAddress: snapshot.issuer?.address,
+          issuerWebsite: snapshot.issuer?.website,
+          invoiceDate: formatDate(snapshot.invoiceDate || invoice.createdAt),
+          billingPeriod: `${formatDate(snapshot.package?.billingPeriodStart || invoice.subscription?.currentPeriodStart)} – ${formatDate(snapshot.package?.billingPeriodEnd || invoice.subscription?.currentPeriodEnd)}`,
+          billingPeriodShort: snapshot.package?.billingPeriod || '30 Days',
+          currency: snapshot.financials?.currency || invoice.currency || 'INR',
+          paymentMethod: snapshot.payment?.method || payment?.paymentMethod || 'RAZORPAY',
+          paymentReference: snapshot.payment?.reference || payment?.providerPaymentId || 'N/A',
+          paidAtDate: formatDateTime(snapshot.payment?.paidAt || invoice.paidAt || payment?.createdAt),
+          paymentStatus: snapshot.payment?.status || payment?.status || invoice.status,
+          planName: snapshot.package?.name || invoice.subscription?.plan?.name || 'Solopreneur',
+          formattedAmount: `INR ${(Number(snapshot.financials?.totalPaise ?? invoice.amountPaise) / 100).toFixed(2)}`,
+          formattedBaseAmount: `INR ${(Number(snapshot.financials?.baseAmountPaise ?? invoice.baseAmountPaise ?? invoice.amountPaise) / 100).toFixed(2)}`,
+          formattedTaxAmount: `INR ${(Number(snapshot.financials?.taxPaise ?? invoice.taxPaise ?? 0) / 100).toFixed(2)}`,
+          gstRate: snapshot.financials?.gstRatePercent ?? (invoice.gstBasisPoints == null ? undefined : invoice.gstBasisPoints / 100),
+        }
+      : {
+          invoiceNumber: invoice.invoiceNumber,
+          formattedBaseAmount: invoice.baseAmountPaise == null ? undefined : `INR ${(invoice.baseAmountPaise / 100).toFixed(2)}`,
+          formattedTaxAmount: invoice.taxPaise == null ? undefined : `INR ${(invoice.taxPaise / 100).toFixed(2)}`,
+          gstRate: invoice.gstBasisPoints == null ? undefined : invoice.gstBasisPoints / 100,
+          status: invoice.status,
+          tenantName: invoice.tenant.billingName || invoice.tenant.name,
+          tenantSlug: store?.slug || invoice.tenant.slug,
+          ownerName: owner?.fullName || 'Merchant Seller',
+          ownerPhone: owner?.phone || store?.supportPhone || store?.whatsappNumber || 'Not provided',
+          ownerEmail: invoice.tenant.billingEmail || owner?.email || store?.supportEmail || 'Not provided',
+          merchantGstin: invoice.tenant.gstin || null,
+          billingAddress: invoice.tenant.billingAddress || null,
+          billingState: invoice.tenant.billingState || null,
+          invoiceDate: formatDate(invoice.createdAt),
+          billingPeriod: `${startStr} – ${endStr}`,
+          billingPeriodShort: `${startStr} – ${endStr}`,
+          currency: invoice.currency || 'INR',
+          paymentMethod: payment?.paymentMethod || 'RAZORPAY',
+          paymentReference: payment?.providerPaymentId || 'N/A',
+          paidAtDate: formatDateTime(invoice.paidAt || payment?.createdAt),
+          paymentStatus: payment?.status || invoice.status,
+          planName: invoice.subscription?.plan?.name || 'Solopreneur',
+          formattedAmount: `INR ${amountInRupees}`,
+        };
+
+    return generateInvoicePdfBuffer(pdfData);
   }
 
   public async getCommunicationHistory(tenantId: string) {
@@ -3529,6 +3565,12 @@ export class AdminService {
           maxStorageMb: Number(data.maxStorageMb ?? 2048),
           customDomainAllowed: Boolean(data.customDomainAllowed),
           isPublic: data.isPublic !== undefined ? Boolean(data.isPublic) : true,
+          gstBasisPoints: (data as any).gstBasisPoints !== undefined ? Number((data as any).gstBasisPoints) : 1800,
+          status: (data as any).status || 'ACTIVE',
+          displayOrder: (data as any).displayOrder !== undefined ? Number((data as any).displayOrder) : 0,
+          badge: (data as any).badge?.trim() || null,
+          isPurchasable: (data as any).isPurchasable !== undefined ? Boolean((data as any).isPurchasable) : true,
+          features: (data as any).features || null,
         },
       });
 
@@ -3554,6 +3596,7 @@ export class AdminService {
             code: plan.code,
             name: plan.name,
             pricePaise: plan.pricePaise,
+            status: (plan as any).status,
           },
         },
       });
@@ -3577,6 +3620,12 @@ export class AdminService {
       maxStorageMb?: number;
       customDomainAllowed?: boolean;
       isPublic?: boolean;
+      gstBasisPoints?: number;
+      status?: string;
+      displayOrder?: number;
+      badge?: string;
+      isPurchasable?: boolean;
+      features?: any;
       highlights?: Array<{ text: string; sortOrder?: number } | string>;
     },
     actorId: string,
@@ -3611,6 +3660,18 @@ export class AdminService {
           ...(data.isPublic !== undefined
             ? { isPublic: Boolean(data.isPublic) }
             : {}),
+          ...(data.gstBasisPoints !== undefined
+            ? { gstBasisPoints: Number(data.gstBasisPoints) }
+            : {}),
+          ...(data.status ? { status: data.status } : {}),
+          ...(data.displayOrder !== undefined
+            ? { displayOrder: Number(data.displayOrder) }
+            : {}),
+          ...(data.badge !== undefined ? { badge: data.badge?.trim() || null } : {}),
+          ...(data.isPurchasable !== undefined
+            ? { isPurchasable: Boolean(data.isPurchasable) }
+            : {}),
+          ...(data.features !== undefined ? { features: data.features } : {}),
         },
       });
 

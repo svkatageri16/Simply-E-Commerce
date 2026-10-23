@@ -2,13 +2,20 @@ export function planAvailability(plan: {
   code: string;
   isPublic: boolean;
   pricePaise: number;
+  status?: string;
+  isPurchasable?: boolean;
 }) {
-  if (plan.code.toUpperCase().includes('GROWTH'))
+  const statusUpper = (plan.status || '').toUpperCase();
+  const codeUpper = (plan.code || '').toUpperCase();
+
+  if (!plan.isPublic || statusUpper === 'INACTIVE') return { availability: 'HIDDEN', purchasable: false };
+  if (statusUpper === 'COMING_SOON' || (!statusUpper && codeUpper.includes('GROWTH')))
     return { availability: 'COMING_SOON', purchasable: false };
-  if (plan.code.toUpperCase().includes('CUSTOM'))
-    return { availability: 'CONTACT', purchasable: false };
+  if (statusUpper === 'CONTACT_SALES' || codeUpper.includes('CUSTOM') || plan.pricePaise <= 0)
+    return { availability: 'CONTACT_SALES', purchasable: false };
+  const purchasable = plan.isPurchasable !== false && plan.isPublic && plan.pricePaise > 0;
   return {
-    availability: plan.isPublic ? 'AVAILABLE' : 'HIDDEN',
-    purchasable: plan.isPublic && plan.pricePaise > 0,
+    availability: purchasable ? 'AVAILABLE' : 'HIDDEN',
+    purchasable,
   };
 }

@@ -1,4 +1,6 @@
 import { subscriptionPrice } from '../subscriptions/subscription-price';
+import { planAvailability } from '../subscriptions/plan-policy';
+import { isEmail } from 'class-validator';
 import {
   Injectable,
   NotFoundException,
@@ -36,7 +38,56 @@ export class PaymentsService {
   ) {}
 
   private getProvider(type: PaymentProviderType): PaymentProvider {
+    if (process.env.NODE_ENV === 'production' && type === PaymentProviderType.MOCK) throw new BadRequestException('A real payment gateway must be connected before accepting online payments.');
     return type === PaymentProviderType.RAZORPAY ? this.razorpayProvider : this.mockProvider;
+  }
+
+  private assertBillingProfile(tenant: { name: string; billingAddress: string | null; billingState: string | null; billingPincode: string | null; billingEmail: string | null }) {
+    if (!tenant.name.trim() || !tenant.billingAddress?.trim() || !tenant.billingState?.trim() || !/^[1-9][0-9]{5}$/.test(tenant.billingPincode || '') || !isEmail(tenant.billingEmail || '')) {
+      throw new BadRequestException('Complete your business name, billing address, state, PIN code and billing email before subscribing. GSTIN is optional.');
+    }
+  }
+
+  public async createAutoPay(tenantId: string, planId: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException('Merchant tenant not found.');
+    this.assertBillingProfile(tenant);
+    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    if (!plan || !planAvailability(plan).purchasable || plan.billingCycle !== 'MONTHLY') throw new BadRequestException('This package is unavailable for monthly AutoPay.');
+    const quote = subscriptionPrice(plan.pricePaise, plan.gstBasisPoints / 100);
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId} FOR UPDATE`;
+      const existing = await tx.autoPayMandate.findFirst({ where: { tenantId, planId }, orderBy: { createdAt: 'desc' } });
+      if (existing && (existing.quote as any).totalPaise === quote.totalPaise && (existing.quote as any).baseAmountPaise === quote.baseAmountPaise && (existing.quote as any).gstBasisPoints === quote.gstBasisPoints) {
+        const remote = await this.razorpayProvider.platformRequest(`subscriptions/${encodeURIComponent(existing.providerSubscriptionId)}`);
+        if (['created', 'authenticated', 'active', 'pending', 'halted'].includes(remote.status)) return { providerSubscriptionId: existing.providerSubscriptionId, keyId: this.razorpayProvider.platformKeyId, ...existing.quote as any };
+      }
+      const remotePlan = await this.razorpayProvider.platformRequest('plans', { period: 'monthly', interval: 1, item: { name: plan.name, amount: quote.totalPaise, currency: 'INR', description: plan.description || plan.name } });
+      const remote = await this.razorpayProvider.platformRequest('subscriptions', { plan_id: remotePlan.id, total_count: 120, quantity: 1, customer_notify: 1, notes: { tenantId, planId } });
+      await tx.autoPayMandate.create({ data: { tenantId, planId, providerSubscriptionId: remote.id, providerPlanId: remotePlan.id, quote } });
+      return { providerSubscriptionId: remote.id, keyId: this.razorpayProvider.platformKeyId, ...quote };
+    }, { timeout: 30000 });
+  }
+
+  public async verifyAutoPay(tenantId: string, subscriptionId: string, paymentId: string, signature?: string, trustedWebhook = false) {
+    const mandate = await this.prisma.autoPayMandate.findFirst({ where: { tenantId, providerSubscriptionId: subscriptionId } });
+    if (!mandate || !/^pay_[A-Za-z0-9]+$/.test(paymentId || '')) throw new BadRequestException('Subscription payment not found.');
+    if (!trustedWebhook && !this.razorpayProvider.verifyWebhookSignature(`${paymentId}|${mandate.providerSubscriptionId}`, signature || '', this.razorpayProvider.platformKeySecret)) throw new PaymentVerificationFailedException();
+    const payment = await this.razorpayProvider.platformRequest(`payments/${encodeURIComponent(paymentId)}`);
+    const invoice = payment.invoice_id ? await this.razorpayProvider.platformRequest(`invoices/${encodeURIComponent(payment.invoice_id)}`) : null;
+    const quote = mandate.quote as any;
+    if (invoice?.subscription_id !== mandate.providerSubscriptionId || payment.status !== 'captured' || payment.amount !== quote.totalPaise || payment.currency !== 'INR' || !payment.order_id) throw new BadRequestException('A captured payment for this mandate and amount is required.');
+    const store = await this.prisma.store.findFirst({ where: { tenantId, deletedAt: null } });
+    if (!store) throw new BadRequestException('Create your store before activating a package.');
+    const order = await this.prisma.paymentOrder.upsert({
+      where: { idempotencyKey: `autopay:${paymentId}` }, update: {},
+      create: { tenantId, storeId: store.id, purpose: PaymentPurpose.PLATFORM_SUBSCRIPTION, subscriptionId: mandate.planId, provider: PaymentProviderType.RAZORPAY, providerOrderId: payment.order_id, amountPaise: quote.totalPaise, baseAmountPaise: quote.baseAmountPaise, taxPaise: quote.taxPaise, gstBasisPoints: quote.gstBasisPoints, currency: 'INR', status: PaymentStatus.PENDING, idempotencyKey: `autopay:${paymentId}` },
+    }).catch(async error => {
+      // Prisma may emulate upsert; the unique constraint still arbitrates concurrent charge delivery.
+      if (error.code !== 'P2002') throw error;
+      return this.prisma.paymentOrder.findUniqueOrThrow({ where: { idempotencyKey: `autopay:${paymentId}` } });
+    });
+    return this.verifyAndCapturePayment({ paymentOrderId: order.id, providerPaymentId: paymentId, skipSignatureVerification: true });
   }
 
   /**
@@ -48,6 +99,10 @@ export class PaymentsService {
   }
 
   public async createMerchantPaymentOrder(orderId: string, idempotencyKey?: string) {
+    if (idempotencyKey) {
+      if (!/^[a-zA-Z0-9_:-]{1,120}$/.test(idempotencyKey)) throw new BadRequestException('Invalid idempotency key.');
+      idempotencyKey = `merchant:${orderId}:${idempotencyKey}`;
+    }
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { store: true },
@@ -177,22 +232,26 @@ export class PaymentsService {
     idempotencyKey?: string,
     allowActiveRenewal = true
   ): Promise<any> {
+    if (idempotencyKey) {
+      if (!/^[a-zA-Z0-9_:-]{1,120}$/.test(idempotencyKey)) throw new BadRequestException('Invalid idempotency key.');
+      idempotencyKey = `subscription:${tenantId}:${idempotencyKey}`;
+    }
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       include: { stores: true },
     });
     if (!tenant) throw new NotFoundException('Merchant tenant not found.');
-
+    this.assertBillingProfile(tenant);
     const plan = await this.prisma.plan.findUnique({
       where: { id: planId },
     });
     if (!plan) throw new NotFoundException('Subscription plan not found.');
 
-    if (plan.code.toUpperCase().includes('GROWTH')) {
+    if (planAvailability(plan).availability === 'COMING_SOON') {
       throw new BadRequestException('The Growth plan is coming soon and cannot be purchased or activated at this time.');
     }
 
-    if (!plan.isPublic || plan.code.toUpperCase().includes('CUSTOM') || plan.pricePaise <= 0) {
+    if (!planAvailability(plan).purchasable) {
       throw new BadRequestException('This plan is not available for self-service purchase. Contact Aikyam.');
     }
 
@@ -225,7 +284,7 @@ export class PaymentsService {
       }
     }
 
-    const quote = subscriptionPrice(plan.pricePaise);
+    const quote = subscriptionPrice(plan.pricePaise, String(plan.gstBasisPoints / 100));
     const storeId = tenant.stores[0]?.id || 'platform';
     const provider = this.razorpayProvider;
 
@@ -367,6 +426,8 @@ export class PaymentsService {
     });
 
     if (!paymentOrder) throw new NotFoundException('Payment order record not found.');
+    if (!paymentOrderId && !providerOrderId) throw new BadRequestException('Payment order ID is required.');
+    if (!providerPaymentId) throw new BadRequestException('Provider payment ID is required.');
 
     // Security check: Validate providerOrderId if provided (Requirement 12: wrong Razorpay order)
     if (providerOrderId && providerOrderId !== paymentOrder.providerOrderId) {
@@ -449,23 +510,27 @@ export class PaymentsService {
             throw new BadRequestException('Payment has failed on gateway.');
           }
 
-          if (paymentEntity.order_id && paymentEntity.order_id !== paymentOrder.providerOrderId) {
+          if (paymentEntity.order_id !== paymentOrder.providerOrderId) {
             this.logger.error(
               `[SECURITY] Gateway order_id mismatch: ${paymentEntity.order_id} vs ${paymentOrder.providerOrderId}`
             );
             throw new BadRequestException('Payment entity order_id does not match payment order.');
           }
 
-          if (paymentEntity.amount && paymentEntity.amount !== paymentOrder.amountPaise) {
+          if (!Number.isSafeInteger(paymentEntity.amount) || paymentEntity.amount !== paymentOrder.amountPaise) {
             this.logger.error(
               `[SECURITY] Tampered payment amount detected: gateway amount ${paymentEntity.amount} vs order amount ${paymentOrder.amountPaise}`
             );
             throw new BadRequestException('Payment amount mismatch: tampered amount detected.');
           }
+          if (paymentEntity.status !== 'captured' || paymentEntity.currency !== paymentOrder.currency) {
+            throw new BadRequestException('Payment has not been captured in the expected currency.');
+          }
         }
       } catch (err: any) {
         if (err instanceof BadRequestException) throw err;
-        this.logger.warn(`Could not verify payment entity with gateway API: ${err.message}`);
+        this.logger.warn('Could not verify payment entity with gateway API.');
+        throw new BadRequestException('Payment could not be confirmed. Please retry verification.');
       }
     }
 
@@ -485,6 +550,22 @@ export class PaymentsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Both duplicate callbacks and distinct webhook events serialize here.
+      // Lock the order first, matching checkout recovery's lock order.
+      if (paymentOrder.orderId) {
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${paymentOrder.orderId} FOR UPDATE`;
+        const order = await tx.order.findUniqueOrThrow({ where: { id: paymentOrder.orderId } });
+        if (order.paymentMethod === 'COD' || order.status === OrderStatus.CANCELLED) {
+          throw new BadRequestException('This order no longer accepts online payment. Contact the merchant for payment reconciliation.');
+        }
+      }
+      await tx.$queryRaw`SELECT id FROM payment_orders WHERE id = ${paymentOrder.id} FOR UPDATE`;
+      const locked = await tx.paymentOrder.findUniqueOrThrow({ where: { id: paymentOrder.id } });
+      if (locked.status === PaymentStatus.PAID) {
+        const previous = await tx.paymentTransaction.findFirst({ where: { paymentOrderId: locked.id } });
+        return { success: true, paymentOrderId: locked.id, purpose: locked.purpose, paymentStatus: PaymentStatus.PAID, transactionId: previous?.id };
+      }
+      PaymentStateMachine.validateTransition(locked.status, PaymentStatus.PAID);
       // Update Payment Order
       await tx.paymentOrder.update({
         where: { id: paymentOrder.id },
@@ -512,20 +593,92 @@ export class PaymentsService {
             paymentOrder.tenantId,
             paymentOrder.subscriptionId,
             30,
-            'RAZORPAY_PAYMENT'
+            'RAZORPAY_PAYMENT',
+            tx
           );
 
           if (activatedSub) {
+            const tenant = await tx.tenant.findUnique({
+              where: { id: paymentOrder.tenantId },
+              include: {
+                memberships: { where: { role: 'SELLER_OWNER', isActive: true }, include: { user: true } },
+                stores: { where: { deletedAt: null }, take: 1 },
+              },
+            });
+            const owner = tenant?.memberships[0]?.user;
+            const store = tenant?.stores[0];
+            const plan = await tx.plan.findUnique({ where: { id: activatedSub.planId } });
+
+            const issuerInfo = {
+              legalName: process.env.AIKYAM_LEGAL_NAME || 'AIKYAM AI SYSTEMS PRIVATE LIMITED',
+              tradeName: process.env.AIKYAM_TRADE_NAME || 'LetzShop by AIKYAM',
+              gstin: process.env.AIKYAM_GSTIN || null,
+              address: process.env.AIKYAM_ADDRESS || 'Pune, Maharashtra, India',
+              state: process.env.AIKYAM_STATE || 'Maharashtra',
+              stateCode: process.env.AIKYAM_STATE_CODE || '27',
+              supportEmail: process.env.AIKYAM_SUPPORT_EMAIL || 'support@letzshop.store',
+              website: process.env.AIKYAM_WEBSITE || 'https://www.aikyamaisystems.com',
+            };
+
+            const now = new Date();
+            const invNumber = `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const basePaise = paymentOrder.baseAmountPaise ?? (paymentOrder.amountPaise - (paymentOrder.taxPaise || 0));
+            const taxPaise = paymentOrder.taxPaise ?? 0;
+            const gstBp = paymentOrder.gstBasisPoints ?? 1800;
+
+            const snapshot = {
+              invoiceNumber: invNumber,
+              invoiceDate: now.toISOString(),
+              merchant: {
+                businessName: tenant?.billingName || tenant?.name || 'Valued Merchant',
+                gstin: tenant?.gstin || null,
+                billingAddress: tenant?.billingAddress || null,
+                state: tenant?.billingState || null,
+                pincode: tenant?.billingPincode || null,
+                billingEmail: tenant?.billingEmail || owner?.email || null,
+                contactName: owner?.fullName || null,
+                contactPhone: owner?.phone || store?.supportPhone || null,
+                storeSlug: store?.slug || tenant?.slug || null,
+              },
+              package: {
+                id: plan?.id || null,
+                name: plan?.name || 'Solopreneur',
+                code: plan?.code || 'STARTER_MONTHLY',
+                billingPeriod: '30 Days',
+                billingPeriodStart: activatedSub.currentPeriodStart.toISOString(),
+                billingPeriodEnd: activatedSub.currentPeriodEnd.toISOString(),
+              },
+              financials: {
+                currency: paymentOrder.currency || 'INR',
+                baseAmountPaise: basePaise,
+                gstRateBasisPoints: gstBp,
+                gstRatePercent: gstBp / 100,
+                taxPaise: taxPaise,
+                totalPaise: paymentOrder.amountPaise,
+              },
+              payment: {
+                method: specificPaymentMethod,
+                reference: providerPaymentId || null,
+                providerOrderId: paymentOrder.providerOrderId || null,
+                paidAt: now.toISOString(),
+                status: 'SUCCESS',
+              },
+              issuer: issuerInfo,
+            };
+
             const invoice = await tx.subscriptionInvoice.create({
               data: {
                 tenantId: paymentOrder.tenantId,
                 subscriptionId: activatedSub.id,
-                invoiceNumber: `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                invoiceNumber: invNumber,
                 amountPaise: paymentOrder.amountPaise,
-                baseAmountPaise: paymentOrder.baseAmountPaise, taxPaise: paymentOrder.taxPaise, gstBasisPoints: paymentOrder.gstBasisPoints,
+                baseAmountPaise: basePaise,
+                taxPaise: taxPaise,
+                gstBasisPoints: gstBp,
+                snapshot,
                 currency: paymentOrder.currency,
                 status: 'PAID',
-                paidAt: new Date(),
+                paidAt: now,
               },
             });
 
@@ -642,7 +795,13 @@ export class PaymentsService {
 
     try {
       // 2. Route events
-      if (eventType === 'order.paid' || eventType === 'payment.captured') {
+      if (eventType === 'subscription.charged') {
+        const subscriptionId = payload?.payload?.subscription?.entity?.id;
+        const paymentId = payload?.payload?.payment?.entity?.id;
+        const mandate = await this.prisma.autoPayMandate.findUnique({ where: { providerSubscriptionId: subscriptionId || '' } });
+        if (!mandate) throw new BadRequestException('Unknown subscription mandate.');
+        await this.verifyAutoPay(mandate.tenantId, subscriptionId, paymentId, undefined, true);
+      } else if (eventType === 'order.paid' || eventType === 'payment.captured') {
         const providerOrderId =
           payload?.payload?.order?.entity?.id ||
           payload?.payload?.payment?.entity?.order_id ||

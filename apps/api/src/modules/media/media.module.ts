@@ -4,6 +4,7 @@ import { MediaService, STORAGE_PROVIDER_TOKEN } from './media.service';
 import { MediaController } from './media.controller';
 import { StorageFactory } from '@simply/storage';
 import { localMediaRoot } from './local-media-root';
+import * as path from 'node:path';
 
 @Global()
 @Module({
@@ -20,10 +21,14 @@ import { localMediaRoot } from './local-media-root';
         ).toLowerCase();
         const driver = (rawDriver === 's3' || rawDriver === 'r2') ? 's3' : 'local';
 
-        if (configService.get('NODE_ENV') === 'production' && driver === 'local')
-          throw new Error('Production merchant media requires STORAGE_PROVIDER=s3 (or MEDIA_STORAGE_PROVIDER=s3) and durable object storage configuration. Legacy local files may still be served from MEDIA_STORAGE_LOCAL_ROOT.');
-
         const rootDir = localMediaRoot(configService.get<string>('MEDIA_STORAGE_LOCAL_ROOT', './media-storage'));
+        if (configService.get('NODE_ENV') === 'production' && driver === 'local') {
+          const mount = configService.get<string>('RAILWAY_VOLUME_MOUNT_PATH') || configService.get<string>('MEDIA_PERSISTENT_VOLUME_ROOT');
+          const relative = mount ? path.relative(path.resolve(mount), rootDir) : '..';
+          if (!mount || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+            throw new Error('Production local media must be inside RAILWAY_VOLUME_MOUNT_PATH or MEDIA_PERSISTENT_VOLUME_ROOT. Alternatively configure S3/R2 storage.');
+          }
+        }
         const publicUrlPrefix = (
           configService.get<string>('STORAGE_PUBLIC_BASE_URL') ||
           configService.get<string>('MEDIA_S3_PUBLIC_URL') ||

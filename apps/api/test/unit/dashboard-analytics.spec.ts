@@ -69,6 +69,7 @@ describe('Merchant Screen 01 — Dashboard & Analytics Automated Test Suite', ()
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DashboardService,
+        { provide: SubscriptionVisibilityService, useValue: { getEffectivePublicStatus: jest.fn().mockResolvedValue({ isPublic: true, requiresPayment: false, reason: null }) } },
         {
           provide: PrismaClient,
           useValue: mockPrisma,

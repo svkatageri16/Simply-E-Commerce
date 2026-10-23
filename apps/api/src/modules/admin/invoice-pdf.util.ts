@@ -8,6 +8,13 @@ export interface InvoicePdfData {
   ownerName: string;
   ownerPhone?: string | null;
   ownerEmail?: string | null;
+  merchantGstin?: string | null;
+  billingAddress?: string | null;
+  billingState?: string | null;
+  issuerName?: string;
+  issuerGstin?: string;
+  issuerAddress?: string;
+  issuerWebsite?: string;
   invoiceDate: string;
   billingPeriod: string;
   billingPeriodShort: string;
@@ -41,31 +48,35 @@ export function generateInvoicePdfBuffer(data: InvoicePdfData): Buffer {
 
   // Brand Header
   s += 'BT\n/F2 20 Tf\n40 780 Td\n(LetzShop) Tj\nET\n';
-  s += 'BT\n/F1 9 Tf\n40 765 Td\n(by AIKYAM AI Systems - Cloud E-Commerce Platform) Tj\nET\n';
+  s += `BT\n/F1 8.5 Tf\n40 766 Td\n(${escapePdfText(data.issuerName || 'AIKYAM AI SYSTEMS PRIVATE LIMITED')} - Platform Issuer) Tj\nET\n`;
+  s += `BT\n/F1 8 Tf\n40 754 Td\n(GSTIN: ${escapePdfText(data.issuerGstin || 'Not configured')} | ${escapePdfText(data.issuerAddress || 'Not configured')}) Tj\nET\n`;
 
   // Invoice Title
-  s += 'BT\n/F2 16 Tf\n380 780 Td\n(INVOICE / RECEIPT) Tj\nET\n';
+  s += 'BT\n/F2 16 Tf\n380 780 Td\n(TAX INVOICE) Tj\nET\n';
   s += `BT\n/F2 9 Tf\n380 765 Td\n(Status: ${escapePdfText(data.status)}) Tj\nET\n`;
 
   // Divider line
   s += '0.85 0.85 0.85 RG\n1 w\n';
-  s += '40 745 m 555 745 l S\n';
+  s += '40 740 m 555 740 l S\n';
 
   // Billed To (Left Column)
-  s += 'BT\n/F2 10 Tf\n40 725 Td\n(BILLED TO:) Tj\nET\n';
-  s += `BT\n/F2 11 Tf\n40 708 Td\n(${escapePdfText(data.tenantName)}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n40 693 Td\n(Store Slug: ${escapePdfText(data.tenantSlug)}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n40 679 Td\n(Contact: ${escapePdfText(data.ownerName)}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n40 665 Td\n(Phone: ${escapePdfText(data.ownerPhone || 'Not provided')}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n40 651 Td\n(Email: ${escapePdfText(data.ownerEmail || 'Not provided')}) Tj\nET\n`;
+  s += 'BT\n/F2 10 Tf\n40 720 Td\n(BILLED TO:) Tj\nET\n';
+  s += `BT\n/F2 11 Tf\n40 705 Td\n(${escapePdfText(data.tenantName)}) Tj\nET\n`;
+  if (data.merchantGstin) {
+    s += `BT\n/F2 9 Tf\n40 691 Td\n(GSTIN: ${escapePdfText(data.merchantGstin)}) Tj\nET\n`;
+  }
+  s += `BT\n/F1 8.5 Tf\n40 ${data.merchantGstin ? 678 : 691} Td\n(Store Slug: ${escapePdfText(data.tenantSlug)}${data.billingState ? ` | Place of Supply: ${escapePdfText(data.billingState)}` : ''}) Tj\nET\n`;
+  s += `BT\n/F1 8.5 Tf\n40 ${data.merchantGstin ? 665 : 678} Td\n(Contact: ${escapePdfText(data.ownerName)} | Phone: ${escapePdfText(data.ownerPhone || 'Not provided')}) Tj\nET\n`;
+  if (data.billingAddress) {
+    s += `BT\n/F1 8 Tf\n40 ${data.merchantGstin ? 652 : 665} Td\n(Billing Address: ${escapePdfText(data.billingAddress)}) Tj\nET\n`;
+  }
 
   // Invoice Details (Right Column)
-  s += 'BT\n/F2 10 Tf\n360 725 Td\n(INVOICE DETAILS:) Tj\nET\n';
-  s += `BT\n/F1 9 Tf\n360 708 Td\n(Invoice Number: ${escapePdfText(data.invoiceNumber)}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n360 693 Td\n(Invoice Date: ${escapePdfText(data.invoiceDate)}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n360 679 Td\n(Billing Period: ${escapePdfText(data.billingPeriod)}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n360 665 Td\n(Currency: ${escapePdfText(data.currency)}) Tj\nET\n`;
-  s += `BT\n/F1 9 Tf\n360 651 Td\n(Payment Method: ${escapePdfText(data.paymentMethod)}) Tj\nET\n`;
+  s += 'BT\n/F2 10 Tf\n360 720 Td\n(INVOICE DETAILS:) Tj\nET\n';
+  s += `BT\n/F1 9 Tf\n360 705 Td\n(Invoice Number: ${escapePdfText(data.invoiceNumber)}) Tj\nET\n`;
+  s += `BT\n/F1 9 Tf\n360 691 Td\n(Invoice Date: ${escapePdfText(data.invoiceDate)}) Tj\nET\n`;
+  s += `BT\n/F1 9 Tf\n360 678 Td\n(Billing Period: ${escapePdfText(data.billingPeriod)}) Tj\nET\n`;
+  s += `BT\n/F1 9 Tf\n360 665 Td\n(Currency: ${escapePdfText(data.currency)} | Method: ${escapePdfText(data.paymentMethod)}) Tj\nET\n`;
 
   // Items Table Header
   const tableY = 620;

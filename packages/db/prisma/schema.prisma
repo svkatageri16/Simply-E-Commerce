@@ -7,6 +7,22 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Gateway mandate and agreed price remain separate from paid access.
+model AutoPayMandate {
+  id                     String   @id @default(uuid())
+  tenantId               String   @map("tenant_id")
+  planId                 String   @map("plan_id")
+  providerSubscriptionId String   @unique @map("provider_subscription_id")
+  providerPlanId         String   @map("provider_plan_id")
+  quote                  Json
+  createdAt              DateTime @default(now()) @map("created_at")
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  plan                   Plan     @relation(fields: [planId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@map("autopay_mandates")
+}
+
 // ==============================================================================
 // ENUMS
 // ==============================================================================
@@ -374,6 +390,7 @@ model RefreshToken {
 }
 
 model Tenant {
+  autoPayMandates AutoPayMandate[]
   id        String       @id @default(uuid())
   name      String
   slug      String       @unique
@@ -404,6 +421,11 @@ model Tenant {
   udyamNumber               String?                 @map("udyam_number")
   businessVerificationStatus String                 @default("INCOMPLETE") @map("business_verification_status") // INCOMPLETE, PENDING_REVIEW, VERIFIED, NEEDS_CHANGES
   documents                 MerchantDocument[]
+  billingName               String?                 @map("billing_name")
+  billingAddress            String?                 @map("billing_address")
+  billingState              String?                 @map("billing_state")
+  billingPincode            String?                 @map("billing_pincode")
+  billingEmail              String?                 @map("billing_email")
 
   @@map("tenants")
 }
@@ -629,11 +651,18 @@ model MediaAsset {
 // ==============================================================================
 
 model Plan {
+  autoPayMandates AutoPayMandate[]
   id                  String   @id @default(uuid())
   code                String   @unique
   name                String
   description         String?
   pricePaise          Int      @map("price_paise") // 0 for free/trial, e.g. 99900 for ₹999
+  gstBasisPoints      Int      @default(1800) @map("gst_basis_points")
+  status              String   @default("ACTIVE") // ACTIVE, COMING_SOON, CONTACT_SALES, INACTIVE
+  displayOrder        Int      @default(0) @map("display_order")
+  badge               String?
+  isPurchasable       Boolean  @default(true) @map("is_purchasable")
+  features            Json?
   billingCycle        String   @default("MONTHLY") @map("billing_cycle") // MONTHLY, YEARLY
   maxProducts         Int      @default(50) @map("max_products")
   maxStaff            Int      @default(2) @map("max_staff")
@@ -701,6 +730,7 @@ model SubscriptionInvoice {
   baseAmountPaise Int?     @map("base_amount_paise")
   taxPaise        Int?     @map("tax_paise")
   gstBasisPoints  Int?     @map("gst_basis_points")
+  snapshot        Json?
   id             String    @id @default(uuid())
   tenantId       String    @map("tenant_id")
   subscriptionId String    @map("subscription_id")

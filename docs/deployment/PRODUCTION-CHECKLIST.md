@@ -16,7 +16,7 @@ Use this pre-flight verification checklist prior to opening LetzShop to live mer
   - Connection pooling configured with SSL mode enabled.
   - All Prisma migrations executed cleanly via `prisma migrate deploy`.
 - [ ] **Object Storage (Cloudflare R2 / AWS S3)**:
-  - `STORAGE_PROVIDER=s3` configured in production.
+  - S3/R2 configured, or Railway persistent volume attached with `MEDIA_STORAGE_LOCAL_ROOT` contained inside `RAILWAY_VOLUME_MOUNT_PATH`.
   - Bucket `letzshop-media` created and public custom domain attached (`media.letzshop.store`).
   - Read/write S3 API credentials tested and operational.
   - KYC and sensitive merchant documents confirmed strictly excluded from public bucket.

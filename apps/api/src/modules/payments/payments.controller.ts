@@ -53,7 +53,12 @@ export class PaymentsController {
       razorpay_signature?: string;
     }
   ) {
-    return this.paymentsService.verifyAndCapturePayment(body);
+    return this.paymentsService.verifyAndCapturePayment({
+      paymentOrderId: body.paymentOrderId,
+      providerPaymentId: body.providerPaymentId || body.razorpay_payment_id,
+      providerOrderId: body.providerOrderId || body.razorpay_order_id,
+      providerSignature: body.providerSignature || body.razorpay_signature,
+    });
   }
 
   @Post('webhook/razorpay')
@@ -62,7 +67,8 @@ export class PaymentsController {
   async handleRazorpayWebhook(
     @Req() req: RawBodyRequest<FastifyRequest>,
     @Body() payload: any,
-    @Headers('x-razorpay-signature') signature?: string
+    @Headers('x-razorpay-signature') signature?: string,
+    @Headers('x-razorpay-event-id') providerEventId?: string
   ) {
     if (!signature) {
       throw new BadRequestException('Missing x-razorpay-signature header');
@@ -92,7 +98,7 @@ export class PaymentsController {
     }
 
     const data = typeof payload === 'string' ? JSON.parse(payload) : payload;
-    const eventId = data?.id || data?.payload?.payment?.entity?.id || `rzp_evt_${Date.now()}`;
+    const eventId = providerEventId || `${data?.event}:${data?.id || data?.payload?.payment?.entity?.id || signature}`;
     const eventType = data?.event || 'payment.captured';
     return this.paymentsService.handleWebhook('RAZORPAY', eventId, eventType, data, signature);
   }

@@ -39,13 +39,27 @@ export async function runSeed() {
   // 2. Subscription Plans
   const starterPlan = await prisma.plan.upsert({
     where: { code: 'STARTER_MONTHLY' },
-    update: { name: 'Launch', pricePaise: 99900 },
+    update: {
+      name: 'Solopreneur',
+      description: 'Complete cloud ecommerce system for ambitious solopreneurs and direct sellers.',
+      pricePaise: 99900, // ₹999/month
+      gstBasisPoints: 1800,
+      status: 'ACTIVE',
+      isPurchasable: true,
+      displayOrder: 1,
+      badge: 'Available',
+    },
     create: {
       id: SEED_IDS.starterPlan,
       code: 'STARTER_MONTHLY',
-      name: 'Launch',
-      description: 'Ideal for early-stage sellers stepping into ecommerce',
+      name: 'Solopreneur',
+      description: 'Complete cloud ecommerce system for ambitious solopreneurs and direct sellers.',
       pricePaise: 99900, // ₹999/month
+      gstBasisPoints: 1800,
+      status: 'ACTIVE',
+      isPurchasable: true,
+      displayOrder: 1,
+      badge: 'Available',
       billingCycle: 'MONTHLY',
       maxProducts: 50,
       maxStaff: 2,
@@ -57,13 +71,27 @@ export async function runSeed() {
 
   const growthPlan = await prisma.plan.upsert({
     where: { code: 'GROWTH_MONTHLY' },
-    update: { name: 'Growth', pricePaise: 299900 },
+    update: {
+      name: 'Professional',
+      description: 'Advanced scale tools, custom domains, and team collaboration for established brands.',
+      pricePaise: 299900, // ₹2,999/month
+      gstBasisPoints: 1800,
+      status: 'COMING_SOON',
+      isPurchasable: false,
+      displayOrder: 2,
+      badge: 'Coming Soon',
+    },
     create: {
       id: SEED_IDS.growthPlan,
       code: 'GROWTH_MONTHLY',
-      name: 'Growth',
-      description: 'Perfect for growing businesses needing custom domains and higher limits',
-      pricePaise: 299900, // ₹2,999/month (Coming Soon)
+      name: 'Professional',
+      description: 'Advanced scale tools, custom domains, and team collaboration for established brands.',
+      pricePaise: 299900, // ₹2,999/month
+      gstBasisPoints: 1800,
+      status: 'COMING_SOON',
+      isPurchasable: false,
+      displayOrder: 2,
+      badge: 'Coming Soon',
       billingCycle: 'MONTHLY',
       maxProducts: 500,
       maxStaff: 10,
@@ -72,9 +100,39 @@ export async function runSeed() {
       isPublic: true,
     },
   });
-  console.log('✓ Subscription plans seeded');
 
-  await prisma.plan.upsert({ where: { code: 'CUSTOM' }, update: {}, create: { code: 'CUSTOM', name: 'Custom', description: 'Contact Aikyam for a custom plan.', pricePaise: 0, isPublic: false } });
+  await prisma.plan.upsert({
+    where: { code: 'CUSTOM' },
+    update: {
+      name: 'Scale',
+      description: 'Dedicated architecture, high-concurrency clusters, and bespoke integrations for enterprise retail.',
+      pricePaise: 0,
+      gstBasisPoints: 1800,
+      status: 'CONTACT_SALES',
+      isPurchasable: false,
+      displayOrder: 3,
+      badge: 'Contact Sales',
+      isPublic: true,
+    },
+    create: {
+      code: 'CUSTOM',
+      name: 'Scale',
+      description: 'Dedicated architecture, high-concurrency clusters, and bespoke integrations for enterprise retail.',
+      pricePaise: 0,
+      gstBasisPoints: 1800,
+      status: 'CONTACT_SALES',
+      isPurchasable: false,
+      displayOrder: 3,
+      badge: 'Contact Sales',
+      billingCycle: 'MONTHLY',
+      maxProducts: 10000,
+      maxStaff: 50,
+      maxStorageMb: 51200,
+      customDomainAllowed: true,
+      isPublic: true,
+    },
+  });
+  console.log('✓ Subscription plans seeded');
 
   // 3. Foundational Themes (6 Specialized Archetypes)
   const foundationalThemes = [

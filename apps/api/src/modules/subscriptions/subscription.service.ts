@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { subscriptionPrice } from './subscription-price';
+import { planAvailability } from './plan-policy';
 import {
   PrismaClient,
+  Prisma,
   SubscriptionStatus,
   StoreStatus,
 } from '@prisma/client';
@@ -33,27 +35,11 @@ export class SubscriptionService {
       },
     });
 
-    const planAvailability = (p: any) => {
-      const codeUpper = (p.code || '').toUpperCase();
-      const isComingSoon = codeUpper.includes('GROWTH');
-      const isContact = codeUpper.includes('CUSTOM') || p.pricePaise <= 0;
-      const purchasable = Boolean(p.isPublic && !isComingSoon && !isContact);
-
-      return {
-        purchasable,
-        isComingSoon,
-        availability: isComingSoon
-          ? 'COMING_SOON'
-          : isContact
-            ? 'CONTACT'
-            : p.isPublic
-              ? 'PURCHASABLE'
-              : 'HIDDEN',
-      };
-    };
-
-    // Canonical sort: Numeric prices ascending, Contact/Custom placed strictly last
+    // Canonical sort: displayOrder first, then numeric prices ascending, Contact/Custom placed strictly last
     const sorted = [...plans].sort((a, b) => {
+      const aOrder = (a as any).displayOrder || 0;
+      const bOrder = (b as any).displayOrder || 0;
+      if (aOrder !== bOrder) return aOrder - bOrder;
       const isCustomA = (a.code || '').toUpperCase().includes('CUSTOM') || a.pricePaise <= 0;
       const isCustomB = (b.code || '').toUpperCase().includes('CUSTOM') || b.pricePaise <= 0;
       if (isCustomA && !isCustomB) return 1;
@@ -62,13 +48,15 @@ export class SubscriptionService {
     });
 
     return sorted
-      .filter((p) => p.isPublic || (p.code || '').toUpperCase().includes('CUSTOM') || (p.code || '').toUpperCase().includes('GROWTH'))
+      .filter((p) => p.isPublic && planAvailability(p).availability !== 'HIDDEN')
       .map((p) => ({
         ...p,
-        ...subscriptionPrice(p.pricePaise),
+        ...subscriptionPrice(p.pricePaise, String(p.gstBasisPoints / 100)),
         // Current subscription activation and renewal use a 30-day monthly period.
         billingPeriodDays: p.billingCycle === 'MONTHLY' ? MONTHLY_SUBSCRIPTION_DAYS : null,
-        ...planAvailability(p),
+        availability: planAvailability(p).availability === 'AVAILABLE' ? 'PURCHASABLE' : planAvailability(p).availability === 'CONTACT_SALES' ? 'CONTACT' : planAvailability(p).availability,
+        purchasable: planAvailability(p).purchasable,
+        isComingSoon: planAvailability(p).availability === 'COMING_SOON',
       }));
   }
 
@@ -80,16 +68,19 @@ export class SubscriptionService {
     tenantId: string,
     planId: string,
     durationDays = MONTHLY_SUBSCRIPTION_DAYS,
-    actorId?: string
+    actorId?: string,
+    transaction?: Prisma.TransactionClient
   ) {
-    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+    const db = transaction || this.prisma;
+    const plan = await db.plan.findUnique({ where: { id: planId } });
     if (!plan) throw new NotFoundException('Subscription plan not found.');
 
     const now = new Date();
-    const currentPeriodStart = now;
+    let currentPeriodStart = now;
     const currentPeriodEnd = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    const activate = async (tx: Prisma.TransactionClient) => {
+      await tx.$queryRaw`SELECT id FROM tenants WHERE id = ${tenantId} FOR UPDATE`;
       // 1. Upsert or create subscription
       const existing = await tx.subscription.findFirst({
         where: { tenantId },
@@ -97,6 +88,11 @@ export class SubscriptionService {
       });
 
       let subscription;
+      // A paid renewal extends remaining access rather than discarding it.
+      if (existing?.status === SubscriptionStatus.ACTIVE && existing.currentPeriodEnd > now) {
+        currentPeriodStart = new Date(existing.currentPeriodEnd);
+        currentPeriodEnd.setTime(existing.currentPeriodEnd.getTime() + durationDays * 86400000);
+      }
       if (existing) {
         subscription = await tx.subscription.update({
           where: { id: existing.id },
@@ -151,7 +147,9 @@ export class SubscriptionService {
       });
 
       return subscription;
-    });
+    };
+
+    const result = transaction ? await activate(transaction) : await this.prisma.$transaction(activate);
 
     return result;
   }

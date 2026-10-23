@@ -46,8 +46,22 @@ export class RazorpayPaymentProvider implements PaymentProvider {
   public get platformWebhookSecret(): string | undefined {
     return (
       process.env.RAZORPAY_PLATFORM_WEBHOOK_SECRET ||
+      process.env.RAZORPAY_WEBHOOK_SECRET ||
       undefined
     );
+  }
+
+  /** Authenticated platform requests never fabricate live gateway responses. */
+  public async platformRequest(path: string, body?: unknown): Promise<any> {
+    if (!this.platformKeyId || !this.platformKeySecret) throw new BadRequestException('Razorpay platform credentials are not configured.');
+    const response = await fetch(`https://api.razorpay.com/v1/${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { Authorization: `Basic ${Buffer.from(`${this.platformKeyId}:${this.platformKeySecret}`).toString('base64')}`, 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) throw new BadRequestException('Razorpay could not complete the subscription request. Please retry.');
+    return response.json();
   }
 
   /**
@@ -90,10 +104,7 @@ export class RazorpayPaymentProvider implements PaymentProvider {
       if (err instanceof BadRequestException) throw err;
       // In automated test environments without outbound internet access, generate deterministic order
       if (
-        process.env.NODE_ENV === 'test' ||
-        err.name === 'ConnectTimeoutError' ||
-        err.name === 'TimeoutError' ||
-        err.message?.includes('fetch failed')
+        process.env.NODE_ENV === 'test'
       ) {
         this.logger.warn(`Razorpay API network unreachable (${err.message}). Generating test fixture order.`);
         return {
@@ -214,6 +225,9 @@ export class RazorpayPaymentProvider implements PaymentProvider {
     }
 
     // Fixture order generation for mock/offline unit tests with dummy/mock keys
+    if (process.env.NODE_ENV !== 'test') {
+      throw new BadRequestException('Valid Razorpay credentials are required.');
+    }
     const providerOrderId = `order_${crypto.randomBytes(8).toString('hex')}`;
     this.logger.log(
       `[RAZORPAY ${purpose}] Order generated: ${providerOrderId} for amount: ₹${input.amountPaise / 100}`
@@ -327,6 +341,7 @@ export class RazorpayPaymentProvider implements PaymentProvider {
         const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`;
         const res = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
           headers: { Authorization: authHeader },
+          signal: AbortSignal.timeout(10000),
         });
 
         if (res.ok) {
@@ -337,6 +352,9 @@ export class RazorpayPaymentProvider implements PaymentProvider {
       }
     }
 
+    if (process.env.NODE_ENV !== 'test') {
+      throw new BadRequestException('Payment could not be confirmed with Razorpay. Please retry verification.');
+    }
     return {
       id: paymentId,
       entity: 'payment',

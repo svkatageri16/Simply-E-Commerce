@@ -15,7 +15,8 @@ import {
   FileText,
   Download,
   Mail,
-  Clock
+  Clock,
+  Building2,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
@@ -45,6 +46,18 @@ export default function SubscriptionPage() {
   const [currentSub, setCurrentSub] = useState<any>(null);
   const [store, setStore] = useState<any>(null);
   const [activating, setActivating] = useState<string | null>(null);
+  const [billingChoice, setBillingChoice] = useState<'ONE_TIME' | 'AUTOPAY'>('ONE_TIME');
+  const [billingProfile, setBillingProfile] = useState({
+    legalName: '',
+    gstin: '',
+    billingAddress: '',
+    state: '',
+    pincode: '',
+    billingEmail: '',
+  });
+  const [savingBilling, setSavingBilling] = useState(false);
+  const [billingSavedMsg, setBillingSavedMsg] = useState('');
+  const [gstinError, setGstinError] = useState('');
 
   useEffect(() => {
     loadSubscriptionInfo();
@@ -53,13 +66,17 @@ export default function SubscriptionPage() {
   const loadSubscriptionInfo = async () => {
     setLoading(true);
     try {
-      const [plansRes, subRes, storeRes] = await Promise.all([
+      const [plansRes, subRes, storeRes, billingRes] = await Promise.all([
         api.subscriptions.getPlans(),
         api.subscriptions.getCurrent().catch(() => null),
         api.stores.getMyStore(),
+        api.subscriptions.getBillingProfile().catch(() => null),
       ]);
       const rawPlans = plansRes || [];
       const sortedPlans = [...rawPlans].sort((a: any, b: any) => {
+        const aOrder = a.displayOrder || 0;
+        const bOrder = b.displayOrder || 0;
+        if (aOrder !== bOrder) return aOrder - bOrder;
         const isCustomA = a.availability === 'CONTACT' || (a.code || '').toUpperCase().includes('CUSTOM') || a.pricePaise <= 0;
         const isCustomB = b.availability === 'CONTACT' || (b.code || '').toUpperCase().includes('CUSTOM') || b.pricePaise <= 0;
         if (isCustomA && !isCustomB) return 1;
@@ -69,10 +86,77 @@ export default function SubscriptionPage() {
       setPlans(sortedPlans);
       setCurrentSub(subRes);
       setStore(storeRes);
+      if (billingRes) {
+        setBillingProfile({
+          legalName: billingRes.legalName || '',
+          gstin: billingRes.gstin || '',
+          billingAddress: billingRes.billingAddress || '',
+          state: billingRes.state || '',
+          pincode: billingRes.pincode || '',
+          billingEmail: billingRes.billingEmail || '',
+        });
+      }
     } catch (err) {
       console.error('Failed to load subscription info', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveBillingProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGstinError('');
+    setBillingSavedMsg('');
+
+    if (billingProfile.gstin && billingProfile.gstin.trim()) {
+      const clean = billingProfile.gstin.trim().toUpperCase();
+      const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstinRegex.test(clean)) {
+        setGstinError('Invalid GSTIN format. Must be a 15-character Indian GSTIN (e.g. 27AAAAA0000A1Z5).');
+        return;
+      }
+    }
+
+    setSavingBilling(true);
+    try {
+      await api.subscriptions.updateBillingProfile({
+        legalName: billingProfile.legalName,
+        gstin: billingProfile.gstin.trim().toUpperCase(),
+        billingAddress: billingProfile.billingAddress,
+        state: billingProfile.state,
+        pincode: billingProfile.pincode,
+        billingEmail: billingProfile.billingEmail,
+      });
+      setBillingSavedMsg('Billing details and GSTIN saved successfully for future invoices.');
+      setTimeout(() => setBillingSavedMsg(''), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save billing profile.');
+    } finally {
+      setSavingBilling(false);
+    }
+  };
+
+  const handleDownloadInvoice = async (invId: string) => {
+    try {
+      const token = localStorage.getItem('simply_seller_token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const res = await fetch(`${apiUrl}/subscriptions/invoices/${invId}/pdf`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to download invoice PDF');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `invoice-${invId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Could not download invoice PDF.');
     }
   };
 
@@ -94,6 +178,10 @@ export default function SubscriptionPage() {
     if (activating) return;
     const planToActivate = plan || launchPlan;
     if (!planToActivate) return;
+    if (!billingProfile.legalName.trim() || !billingProfile.billingAddress.trim() || !billingProfile.state.trim() || !/^[1-9][0-9]{5}$/.test(billingProfile.pincode) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billingProfile.billingEmail)) {
+      alert(t('subscription.billingProfileRequired'));
+      return;
+    }
 
     setActivating(planToActivate.id);
 
@@ -113,7 +201,8 @@ export default function SubscriptionPage() {
       }
 
       // Backend calculates authoritative plan amount and creates Razorpay Order
-      const orderData = await api.subscriptions.createOrder(planToActivate.id, 'MONTHLY');
+      const autoPay = billingChoice === 'AUTOPAY';
+      const orderData = autoPay ? await api.subscriptions.createAutoPay(planToActivate.id) : await api.subscriptions.createOrder(planToActivate.id, 'MONTHLY');
 
       const options = {
         key: orderData.keyId,
@@ -121,7 +210,7 @@ export default function SubscriptionPage() {
         currency: orderData.currency || 'INR',
         name: 'LetzShop Platform',
         description: `Plan: ${planToActivate.name}`,
-        order_id: orderData.providerOrderId,
+        ...(autoPay ? { subscription_id: orderData.providerSubscriptionId } : { order_id: orderData.providerOrderId }),
         prefill: {
           name: user?.fullName || '',
           contact: user?.phone || '',
@@ -139,9 +228,11 @@ export default function SubscriptionPage() {
           razorpay_payment_id: string;
           razorpay_order_id: string;
           razorpay_signature: string;
+          razorpay_subscription_id?: string;
         }) {
           try {
-            await api.subscriptions.verify({
+            if (autoPay) await api.subscriptions.verifyAutoPay({ razorpay_subscription_id: response.razorpay_subscription_id || orderData.providerSubscriptionId, razorpay_payment_id: response.razorpay_payment_id, razorpay_signature: response.razorpay_signature });
+            else await api.subscriptions.verify({
               paymentOrderId: orderData.paymentOrderId,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_order_id: response.razorpay_order_id,
@@ -276,7 +367,7 @@ export default function SubscriptionPage() {
           <div className={getGridClasses(plans.length)}>
             {plans.map((p: any) => {
               const isCurrent = currentSub?.planId === p.id && isLive;
-              const isComingSoon = p.availability === 'COMING_SOON' || (p.code || '').toUpperCase().includes('GROWTH');
+              const isComingSoon = p.availability === 'COMING_SOON';
               const isCustom = p.availability === 'CONTACT' || p.pricePaise <= 0 || (p.code || '').toUpperCase().includes('CUSTOM');
               const isPopular = p.code === 'STARTER_MONTHLY' && !isCurrent;
 
@@ -325,15 +416,53 @@ export default function SubscriptionPage() {
                         <span className="text-xs font-semibold text-[var(--merchant-text)]">
                           Contact Aikyam
                         </span>
+                        <p className="text-[11px] text-[var(--merchant-text-muted)] mt-0.5">+ 18% GST (Quote-based)</p>
                       </div>
                     ) : (
-                      <div className="flex items-baseline gap-1 py-1">
-                        <span className="text-3xl font-black text-[var(--merchant-text)] font-mono">
-                          {formatPaise(p.pricePaise)}
-                        </span>
-                        <span className="text-xs font-medium text-[var(--merchant-text-muted)]">
-                          + GST / {p.billingPeriodDays || 30} days
-                        </span>
+                      <div className="space-y-1.5 py-1">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-3xl font-black text-[var(--merchant-text)] font-mono">
+                            {formatPaise(p.baseAmountPaise || p.pricePaise)}
+                          </span>
+                          <span className="text-xs font-semibold text-[var(--merchant-text-muted)]">
+                            + 18% GST ({formatPaise(p.taxPaise || Math.round(p.pricePaise * 0.18))})
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-[var(--merchant-text)]">
+                          Total: <span className="text-emerald-500 font-mono font-black">{formatPaise(p.totalPaise || (p.pricePaise + Math.round(p.pricePaise * 0.18)))}</span> / {p.billingPeriodDays || 30} days
+                        </p>
+                      </div>
+                    )}
+
+                    {!isCurrent && isPopular && (
+                      <div className="pt-2 pb-1 space-y-1.5 text-xs">
+                        <label className="font-bold text-[var(--merchant-text)] text-[11px] block">
+                          Billing Option:
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setBillingChoice('ONE_TIME')}
+                            className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition ${
+                              billingChoice === 'ONE_TIME'
+                                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500'
+                                : 'border-[var(--merchant-border)] text-[var(--merchant-text-muted)] hover:bg-[var(--merchant-surface-muted)]'
+                            }`}
+                          >
+                            Pay for 30 Days
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBillingChoice('AUTOPAY')}
+                            className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition ${
+                              billingChoice === 'AUTOPAY'
+                                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-500'
+                                : 'border-[var(--merchant-border)] text-[var(--merchant-text-muted)] hover:bg-[var(--merchant-surface-muted)]'
+                            }`}
+                          >
+                            Monthly AutoPay
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -400,6 +529,125 @@ export default function SubscriptionPage() {
               );
             })}
           </div>
+        </div>
+
+        {/* Business Billing Profile & GST Details */}
+        <div className="bg-[var(--merchant-surface)] rounded-2xl border border-[var(--merchant-border)] p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--merchant-border)] pb-3">
+            <div>
+              <h3 className="text-base font-bold text-[var(--merchant-text)] flex items-center gap-2">
+                <Building2 className="w-4 h-4 text-[var(--merchant-primary)]" />
+                <span>Business Billing Profile & GST Details</span>
+              </h3>
+              <p className="text-xs text-[var(--merchant-text-muted)] mt-0.5">
+                Provide your legal business and GST information for official GST tax invoice generation.
+              </p>
+            </div>
+            {billingSavedMsg && (
+              <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full animate-fade-in">
+                ✓ {billingSavedMsg}
+              </span>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveBillingProfile} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-[var(--merchant-text-secondary)] mb-1">
+                  Business / Legal Name
+                </label>
+                <input
+                  type="text"
+                  value={billingProfile.legalName}
+                  onChange={(e) => setBillingProfile({ ...billingProfile, legalName: e.target.value })}
+                  placeholder="e.g. Acme Retail Enterprises"
+                  className="w-full px-3 py-2 bg-[var(--merchant-surface-raised)] border border-[var(--merchant-border)] rounded-lg text-xs text-[var(--merchant-text)] focus:outline-none focus:ring-2 focus:ring-[var(--merchant-primary)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--merchant-text-secondary)] mb-1">
+                  GSTIN <span className="text-[10px] text-[var(--merchant-text-muted)] font-normal">(Optional if unregistered)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={15}
+                  value={billingProfile.gstin}
+                  onChange={(e) => {
+                    setGstinError('');
+                    setBillingProfile({ ...billingProfile, gstin: e.target.value.toUpperCase() });
+                  }}
+                  placeholder="e.g. 27AAAAA0000A1Z5"
+                  className="w-full px-3 py-2 bg-[var(--merchant-surface-raised)] border border-[var(--merchant-border)] rounded-lg text-xs font-mono tracking-wider text-[var(--merchant-text)] focus:outline-none focus:ring-2 focus:ring-[var(--merchant-primary)]"
+                />
+                {gstinError && <p className="text-[11px] text-rose-500 font-medium mt-1">{gstinError}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--merchant-text-secondary)] mb-1">
+                  Billing Email
+                </label>
+                <input
+                  type="email"
+                  value={billingProfile.billingEmail}
+                  onChange={(e) => setBillingProfile({ ...billingProfile, billingEmail: e.target.value })}
+                  placeholder="billing@yourbusiness.com"
+                  className="w-full px-3 py-2 bg-[var(--merchant-surface-raised)] border border-[var(--merchant-border)] rounded-lg text-xs text-[var(--merchant-text)] focus:outline-none focus:ring-2 focus:ring-[var(--merchant-primary)]"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-[var(--merchant-text-secondary)] mb-1">
+                  Registered Billing Address
+                </label>
+                <input
+                  type="text"
+                  value={billingProfile.billingAddress}
+                  onChange={(e) => setBillingProfile({ ...billingProfile, billingAddress: e.target.value })}
+                  placeholder="Shop No. 4, Commercial Complex, Main Road"
+                  className="w-full px-3 py-2 bg-[var(--merchant-surface-raised)] border border-[var(--merchant-border)] rounded-lg text-xs text-[var(--merchant-text)] focus:outline-none focus:ring-2 focus:ring-[var(--merchant-primary)]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--merchant-text-secondary)] mb-1">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={billingProfile.state}
+                    onChange={(e) => setBillingProfile({ ...billingProfile, state: e.target.value })}
+                    placeholder="Maharashtra"
+                    className="w-full px-3 py-2 bg-[var(--merchant-surface-raised)] border border-[var(--merchant-border)] rounded-lg text-xs text-[var(--merchant-text)] focus:outline-none focus:ring-2 focus:ring-[var(--merchant-primary)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--merchant-text-secondary)] mb-1">
+                    PIN Code
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={billingProfile.pincode}
+                    onChange={(e) => setBillingProfile({ ...billingProfile, pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                    placeholder="411001"
+                    className="w-full px-3 py-2 bg-[var(--merchant-surface-raised)] border border-[var(--merchant-border)] rounded-lg text-xs text-[var(--merchant-text)] font-mono focus:outline-none focus:ring-2 focus:ring-[var(--merchant-primary)]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="submit"
+                disabled={savingBilling}
+                className="py-2 px-5 rounded-lg text-xs font-bold bg-[var(--merchant-primary)] hover:bg-[var(--merchant-primary-hover)] text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {savingBilling ? 'Saving...' : 'Save Billing Profile'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Subscription Details & Billing History */}
@@ -508,14 +756,9 @@ export default function SubscriptionPage() {
                             <td className="px-6 py-4 text-right">
                               <button
                                 type="button"
-                                disabled={!inv.invoicePdfUrl}
-                                className={`inline-flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                                  inv.invoicePdfUrl 
-                                    ? 'text-[var(--merchant-primary)] hover:underline' 
-                                    : 'text-[var(--merchant-text-muted)] cursor-not-allowed'
-                                }`}
-                                onClick={() => inv.invoicePdfUrl && window.open(inv.invoicePdfUrl, '_blank')}
-                                title={!inv.invoicePdfUrl ? 'PDF unavailable' : 'Download PDF'}
+                                className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--merchant-primary)] hover:underline cursor-pointer"
+                                onClick={() => handleDownloadInvoice(inv.id)}
+                                title="Download PDF Tax Invoice"
                               >
                                 <Download className="w-3.5 h-3.5" />
                                 {t('subscription.downloadPdf')}

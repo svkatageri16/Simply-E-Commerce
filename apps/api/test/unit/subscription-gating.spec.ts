@@ -41,6 +41,7 @@ describe('Subscription-Gated Store Visibility (Unit Tests)', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'tenant-1' }]),
       store: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),

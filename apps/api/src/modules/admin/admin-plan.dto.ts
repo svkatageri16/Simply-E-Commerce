@@ -27,6 +27,12 @@ export class CreateAdminPlanDto {
   @IsOptional() @IsInt() @Min(0) @Max(2147483647) maxStorageMb?: number;
   @IsOptional() @IsBoolean() customDomainAllowed?: boolean;
   @IsOptional() @IsBoolean() isPublic?: boolean;
+  @IsOptional() @IsInt() @Min(0) @Max(10000) gstBasisPoints?: number;
+  @IsOptional() @IsIn(['ACTIVE', 'COMING_SOON', 'CONTACT_SALES', 'INACTIVE']) status?: string;
+  @IsOptional() @IsInt() @Min(0) displayOrder?: number;
+  @IsOptional() @IsString() @Length(0, 50) badge?: string;
+  @IsOptional() @IsBoolean() isPurchasable?: boolean;
+  @IsOptional() features?: any;
   @IsOptional() @IsArray() highlights?: any[];
 }
 export class UpdateAdminPlanDto extends PartialType(CreateAdminPlanDto) {}

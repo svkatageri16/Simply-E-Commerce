@@ -31,7 +31,7 @@ export class SubscriptionVisibilityService {
     } catch (error) {
       if (!(error instanceof DomainException)) throw error;
       const reason = (error.getResponse() as any).code as string;
-      return { isPublic: false, requiresPayment: ['SUBSCRIPTION_REQUIRED', 'SUBSCRIPTION_EXPIRED'].includes(reason), reason, evaluatedAt: new Date().toISOString() };
+      return { isPublic: false, requiresPayment: ['SUBSCRIPTION_REQUIRED', 'STORE_SUBSCRIPTION_EXPIRED'].includes(reason), reason, evaluatedAt: new Date().toISOString() };
     }
   }
 

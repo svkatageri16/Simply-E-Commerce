@@ -174,12 +174,12 @@ export default function CompactDashboardPage() {
   // Setup / Readiness evaluation (truthful checks from backend entitlement)
   const isLive = activeStore?.status === 'LIVE' || activeStore?.status === 'ACTIVE';
   const hasActiveSubscription = Boolean(
-    activeStore?.subscription?.status === 'ACTIVE' ||
+    activeStore?.publicVisibility ? !activeStore.publicVisibility.requiresPayment : activeStore?.subscription?.status === 'ACTIVE' ||
     activeStore?.subscriptionStatus === 'ACTIVE' ||
     (activeStore?.publicVisibility?.canBePublic && activeStore?.status !== 'EXPIRED')
   );
   const isStorePublic = Boolean(
-    activeStore?.publicVisibility?.canBePublic ?? (activeStore?.isPubliclyAccessible && isLive)
+    activeStore?.publicVisibility?.isPublic ?? (activeStore?.isPubliclyAccessible && isLive)
   );
 
   const baseStorefrontUrl = getStorefrontUrl();
