@@ -17,6 +17,7 @@ export function smtpDeliveryEvidence(result: any, to: string) {
 }
 
 export interface OrderEmailContext {
+  eventId?: string;
   order: any;
   store: {
     id: string;
@@ -126,7 +127,7 @@ export class MailService {
     }
   }
 
-  private async sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  private async sendEmail(to: string, subject: string, html: string, eventId?: string): Promise<boolean> {
     if (!to || !to.includes('@')) {
       this.logger.warn(`[SMTP] Skipped sending email: Invalid recipient address "${to}"`);
       return false;
@@ -139,6 +140,7 @@ export class MailService {
           to,
           subject,
           html,
+          ...(eventId ? { messageId: `<${Buffer.from(eventId).toString('hex')}@notifications.letzshop.store>` } : {}),
         });
         const evidence = smtpDeliveryEvidence(result, to);
         this.logger.log(`[SMTP] Notification delivery ${JSON.stringify(evidence)}`);
@@ -327,7 +329,7 @@ export class MailService {
       </html>
     `;
 
-    return this.sendEmail(recipient, subject, html);
+    return this.sendEmail(recipient, subject, html, ctx.eventId);
   }
 
   /**
@@ -410,7 +412,7 @@ export class MailService {
       </html>
     `;
 
-    return this.sendEmail(recipient, subject, html);
+    return this.sendEmail(recipient, subject, html, ctx.eventId);
   }
 
   /**
@@ -487,7 +489,7 @@ export class MailService {
       </html>
     `;
 
-    return this.sendEmail(recipient, subject, html);
+    return this.sendEmail(recipient, subject, html, ctx.eventId);
   }
 
   /**
@@ -518,6 +520,13 @@ export class MailService {
       badgeColor = '#d97706';
       headerBg = '#b45309';
       bodyIntro = `Your order <strong>#${order.orderNumber}</strong> has been carefully packed and is ready for pickup/dispatch.`;
+    } else if (status === 'OUT_FOR_DELIVERY') {
+      statusTitle = 'Out For Delivery';
+      statusBadgeText = 'OUT FOR DELIVERY';
+      badgeBg = '#f0fdf4';
+      badgeColor = '#16a34a';
+      headerBg = '#15803d';
+      bodyIntro = `Your order <strong>#${order.orderNumber}</strong> from <strong>${store.name}</strong> is out for delivery! Please keep your phone reachable for the delivery partner.`;
     } else if (status === 'CANCELLED') {
       statusTitle = 'Order Cancelled';
       statusBadgeText = 'CANCELLED';
@@ -593,7 +602,7 @@ export class MailService {
       </html>
     `;
 
-    return this.sendEmail(recipient, subject, html);
+    return this.sendEmail(recipient, subject, html, ctx.eventId);
   }
 
   /**

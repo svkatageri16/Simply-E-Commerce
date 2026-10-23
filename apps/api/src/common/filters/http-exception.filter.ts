@@ -18,6 +18,16 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
     const request = ctx.getRequest();
 
     const requestId = request?.requestId || request?.headers?.['x-request-id'] || 'req_unknown';
+    const tenantId = (request as any)?.tenantContext?.tenantId || (request as any)?.user?.tenantId || 'none';
+    const storeId = (request as any)?.tenantContext?.storeId || (request as any)?.user?.storeId || 'none';
+    const method = request?.method || 'UNKNOWN';
+    const url = String(request?.url || request?.raw?.url || 'unknown_url').split('?')[0];
+    const safeIdentifier = (value: unknown) => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,120}$/.test(value) ? value : undefined;
+    const context = {
+      requestId: safeIdentifier(requestId), endpoint: url, operation: `${method} ${request?.routeOptions?.url || url}`,
+      tenantId: safeIdentifier(tenantId), storeId: safeIdentifier(storeId) || safeIdentifier(request?.body?.storeId),
+      merchantId: safeIdentifier(request?.user?.userId), orderId: safeIdentifier(request?.body?.orderId || request?.params?.id),
+    };
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let code: string = ErrorCode.INTERNAL_SERVER_ERROR;
@@ -39,9 +49,33 @@ export class GlobalHttpExceptionFilter implements ExceptionFilter {
           message = resObj.message[0] || 'Validation failed for the submitted data.';
         }
       }
+    } else if (exception && typeof exception === 'object' && 'code' in exception && typeof (exception as any).code === 'string' && (exception as any).code.startsWith('P')) {
+      // Prisma known request error mapping
+      const pCode = (exception as any).code;
+      const meta = (exception as any).meta || {};
+      this.logger.warn(JSON.stringify({ ...context, errorCode: pCode, model: safeIdentifier(meta.modelName) }));
+
+      if (pCode === 'P2002') {
+        status = HttpStatus.CONFLICT;
+        code = ErrorCode.IDEMPOTENCY_CONFLICT;
+        const target = Array.isArray(meta.target) ? meta.target.join(', ') : meta.target || 'field';
+        message = `A record with this ${target} already exists. Please choose a unique value.`;
+      } else if (pCode === 'P2003') {
+        status = HttpStatus.BAD_REQUEST;
+        code = ErrorCode.VALIDATION_FAILED;
+        message = 'A referenced resource (such as category, variant, or media) does not exist.';
+      } else if (pCode === 'P2025') {
+        status = HttpStatus.NOT_FOUND;
+        code = ErrorCode.PRODUCT_NOT_FOUND;
+        message = 'The requested resource was not found.';
+      } else {
+        status = HttpStatus.INTERNAL_SERVER_ERROR;
+        code = ErrorCode.INTERNAL_SERVER_ERROR;
+        message = 'The operation could not be completed. Please retry or contact support with the request ID.';
+      }
     } else if (exception instanceof Error) {
       // Internal unhandled errors - never leak database or stack details to client
-      this.logger.error(`[${requestId}] Unhandled Error: ${exception.message}`, exception.stack);
+      this.logger.error(JSON.stringify({ ...context, errorType: exception.name, errorCode: 'UNHANDLED' }));
       message = 'An unexpected server error occurred. Please contact support.';
       code = ErrorCode.INTERNAL_SERVER_ERROR;
     }

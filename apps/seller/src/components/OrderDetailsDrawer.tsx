@@ -127,18 +127,21 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
   const [updating, setUpdating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // WhatsApp manual sending follow-up panel state after dispatch
+  // WhatsApp manual sending follow-up panel state after order status updates
   const [whatsappFollowUp, setWhatsappFollowUp] = useState<{
     orderNumber: string;
     customerName: string;
     customerPhone: string;
     buyerWaUrl: string;
+    buyerText?: string;
+    stageName?: string;
     buyerOpened: boolean;
     riderName?: string;
     riderPhone?: string;
     riderWaUrl?: string;
     riderOpened: boolean;
   } | null>(null);
+  const [copiedBuyerMsg, setCopiedBuyerMsg] = useState(false);
 
   // Delivery Partners Directory from Store
   const [deliveryPartners, setDeliveryPartners] = useState<
@@ -499,7 +502,9 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
     };
 
     let text = '';
-    if (status === 'DISPATCHED') {
+    if (status === 'OUT_FOR_DELIVERY') {
+      text = `Hello ${customerName}, your order #${order.orderNumber} from ${store?.name || 'our store'} is out for delivery. Please keep your phone available.${trackingUrl ? ` Track: ${trackingUrl}` : ''}`;
+    } else if (status === 'DISPATCHED') {
       text = buildOrderDispatchedBuyerMessage(ctx);
     } else if (status === 'COMPLETED') {
       text = buildOrderDeliveredMessage(ctx);
@@ -575,14 +580,15 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
       setStatusConfirmModal(null);
       onStatusUpdated();
 
-      // Show reliable WhatsApp follow-up panel with separate manual send actions (no popup race)
-      if (targetStatus === 'DISPATCHED') {
-        const itemsSummary =
-          order.itemsSummary ||
-          (order.items && order.items.map((it: any) => `${it.quantity}x ${it.productName}`).join(', ')) ||
-          'Items';
+      // Show reliable WhatsApp follow-up panel with stage-specific message & manual send actions
+      const itemsSummary =
+        order.itemsSummary ||
+        (order.items && order.items.map((it: any) => `${it.quantity}x ${it.productName}`).join(', ')) ||
+        'Items';
 
-        const buyerText = buildOrderDispatchedBuyerMessage({
+      let buyerText = '';
+      if (targetStatus === 'DISPATCHED') {
+        buyerText = buildOrderDispatchedBuyerMessage({
           orderNumber: order.orderNumber,
           storeName: store?.name || 'Our Store',
           customerName,
@@ -601,11 +607,84 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
           riderPhone: effectiveRiderPhone,
           customMessage: customMessage.trim() || undefined,
         });
+      } else if (targetStatus === 'COMPLETED') {
+        const effReviewToken = order.reviewToken || order.trackingToken;
+        const reviewUrl = effReviewToken
+          ? buildPublicReviewUrl(store?.slug || 'store', order.orderNumber, effReviewToken)
+          : trackingUrl;
+        buyerText = buildOrderDeliveredMessage({
+          orderNumber: order.orderNumber,
+          storeName: store?.name || 'Our Store',
+          customerName,
+          customerPhone,
+          totalPaise: order.totalPaise,
+          itemsSummary,
+          paymentMethod: order.paymentMethod,
+          paymentStatus: order.paymentStatus,
+          codCollectionMethod: order.codCollectionMethod,
+          trackingUrl,
+          reviewUrl,
+          customMessage: customMessage.trim() || undefined,
+        });
+      } else if (targetStatus === 'ACCEPTED' || targetStatus === 'CONFIRMED') {
+        buyerText = buildOrderAcceptedMessage({
+          orderNumber: order.orderNumber,
+          storeName: store?.name || 'Our Store',
+          customerName,
+          customerPhone,
+          totalPaise: order.totalPaise,
+          itemsSummary,
+          paymentMethod: order.paymentMethod,
+          paymentStatus: order.paymentStatus,
+          codCollectionMethod: order.codCollectionMethod,
+          trackingUrl,
+          customMessage: customMessage.trim() || undefined,
+        });
+      } else if (targetStatus === 'READY') {
+        buyerText = buildOrderReadyMessage({
+          orderNumber: order.orderNumber,
+          storeName: store?.name || 'Our Store',
+          customerName,
+          customerPhone,
+          totalPaise: order.totalPaise,
+          itemsSummary,
+          paymentMethod: order.paymentMethod,
+          paymentStatus: order.paymentStatus,
+          codCollectionMethod: order.codCollectionMethod,
+          trackingUrl,
+          customMessage: customMessage.trim() || undefined,
+        });
+      } else if (targetStatus === 'CANCELLED') {
+        buyerText = buildOrderCancelledMessage({
+          orderNumber: order.orderNumber,
+          storeName: store?.name || 'Our Store',
+          customerName,
+          customerPhone,
+          totalPaise: order.totalPaise,
+          itemsSummary,
+          cancellationReason: effectiveReason || customMessage.trim() || undefined,
+        });
+      } else {
+        buyerText = buildOrderAcceptedMessage({
+          orderNumber: order.orderNumber,
+          storeName: store?.name || 'Our Store',
+          customerName,
+          customerPhone,
+          totalPaise: order.totalPaise,
+          itemsSummary,
+          paymentMethod: order.paymentMethod,
+          paymentStatus: order.paymentStatus,
+          codCollectionMethod: order.codCollectionMethod,
+          trackingUrl,
+          customMessage: customMessage.trim() || undefined,
+        });
+      }
 
+      if (buyerText && customerPhone) {
         const buyerWaUrl = buildWhatsAppDeepLink(customerPhone, buyerText);
 
         let riderWaUrl = '';
-        if (effectiveRiderPhone) {
+        if (targetStatus === 'DISPATCHED' && effectiveRiderPhone) {
           const riderText = buildRiderAssignmentMessage({
             orderNumber: order.orderNumber,
             storeName: store?.name || 'Our Store',
@@ -638,6 +717,8 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
           customerName,
           customerPhone,
           buyerWaUrl,
+          buyerText,
+          stageName: targetStatus,
           buyerOpened: false,
           riderName: effectiveRiderName,
           riderPhone: effectiveRiderPhone,
@@ -928,7 +1009,7 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
               );
             })()}
 
-            {/* 2. POST-DISPATCH WHATSAPP FOLLOW-UP PANEL (Requirements 3 & 4) */}
+            {/* 2. POST-ACTION WHATSAPP & EMAIL NOTIFICATION PANEL */}
             {whatsappFollowUp && (
               <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 sm:p-5 space-y-3 animate-in fade-in">
                 <div className="flex items-start justify-between">
@@ -937,9 +1018,11 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                       ✓
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-merchant-text">Dispatch Confirmed</h4>
+                      <h4 className="font-bold text-sm text-merchant-text">
+                        Order Updated: {whatsappFollowUp.stageName || 'Saved'}
+                      </h4>
                       <p className="text-xs text-merchant-text-muted">
-                        Buyer email was sent automatically. Open WhatsApp to send pre-filled updates:
+                        Buyer email notification queued via reliable outbox.
                       </p>
                     </div>
                   </div>
@@ -957,6 +1040,11 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                   >
                     Dismiss ✕
                   </button>
+                </div>
+
+                <div className="p-2.5 bg-merchant-surface/60 border border-merchant-border rounded-xl text-xs text-merchant-text-secondary">
+                  <span className="font-semibold text-merchant-text">Instruction: </span>
+                  WhatsApp will open with a prepared message for this customer. Review the message and press Send in WhatsApp to notify them.
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -980,24 +1068,43 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                         +{normalizeIndianPhone(whatsappFollowUp.customerPhone)}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        window.open(whatsappFollowUp.buyerWaUrl, '_blank');
-                        setWhatsappFollowUp((prev) => {
-                          if (!prev) return null;
-                          const updated = { ...prev, buyerOpened: true };
-                          try {
-                            localStorage.setItem(`simply_wa_followup_${prev.orderNumber}`, JSON.stringify(updated));
-                          } catch {}
-                          return updated;
-                        });
-                      }}
-                      className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center gap-2 shadow-2xs transition cursor-pointer"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>{whatsappFollowUp.buyerOpened ? 'Open Buyer WhatsApp Again' : 'Open Buyer WhatsApp'}</span>
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          window.open(whatsappFollowUp.buyerWaUrl, '_blank');
+                          setWhatsappFollowUp((prev) => {
+                            if (!prev) return null;
+                            const updated = { ...prev, buyerOpened: true };
+                            try {
+                              localStorage.setItem(`simply_wa_followup_${prev.orderNumber}`, JSON.stringify(updated));
+                            } catch {}
+                            return updated;
+                          });
+                        }}
+                        className="w-full py-2 px-3 rounded-xl text-xs font-bold bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center gap-2 shadow-2xs transition cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>{whatsappFollowUp.buyerOpened ? 'Open Buyer WhatsApp Again' : 'Open WhatsApp Message'}</span>
+                      </button>
+
+                      {whatsappFollowUp.buyerText && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(whatsappFollowUp.buyerText || '');
+                              setCopiedBuyerMsg(true);
+                              setTimeout(() => setCopiedBuyerMsg(false), 2500);
+                            }
+                          }}
+                          className="w-full py-1.5 px-3 rounded-xl text-xs font-semibold bg-merchant-surface border border-merchant-border hover:bg-merchant-surface-muted text-merchant-text flex items-center justify-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>{copiedBuyerMsg ? 'Message Copied ✓' : 'Copy Prepared Message'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Rider Action (if assigned) */}
@@ -1221,6 +1328,20 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                 )}
 
                 {order.status === 'DISPATCHED' && (
+                  <button type="button" disabled={updating || order.shipmentStatus === 'OUT_FOR_DELIVERY'} className="px-4 py-2 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 text-xs font-bold" onClick={async () => {
+                    setUpdating(true); setActionError(null);
+                    try {
+                      await api.orders.markOutForDelivery(order.id);
+                      const buyerWaUrl = getWhatsAppLinkForStatus('OUT_FOR_DELIVERY');
+                      const followUp = { orderNumber: order.orderNumber, customerName, customerPhone, buyerWaUrl, buyerText: new URL(buyerWaUrl).searchParams.get('text') || '', stageName: 'OUT_FOR_DELIVERY', buyerOpened: false, riderOpened: false };
+                      setWhatsappFollowUp(followUp);
+                      localStorage.setItem(`simply_wa_followup_${order.orderNumber}`, JSON.stringify(followUp));
+                      onStatusUpdated();
+                    } catch (err: any) { setActionError(err.message || 'Unable to update delivery status.'); }
+                    finally { setUpdating(false); }
+                  }}>{order.shipmentStatus === 'OUT_FOR_DELIVERY' ? 'Out for Delivery' : 'Mark Out for Delivery'}</button>
+                )}
+                {order.status === 'DISPATCHED' && (
                   <button
                     type="button"
                     disabled={updating}
@@ -1399,7 +1520,7 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                           <span className="text-[10px] text-merchant-text-muted font-normal">({riderVehicle})</span>
                         </span>
                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                          Ready for 1-Click Dispatch
+                          Ready for dispatch
                         </span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-merchant-text-secondary">
@@ -1433,7 +1554,7 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                         </div>
                       )}
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/5 p-2 rounded-lg border border-emerald-500/10">
-                        ⚡ Direct 1-Click Dispatch: When you click <strong>Dispatch Order</strong>, both <strong>{riderName}</strong> and buyer <strong>{customerName}</strong> will be notified with their own professional message.
+                        When you confirm dispatch, the order updates and customer email is queued. You can then open prepared WhatsApp messages for <strong>{riderName}</strong> and <strong>{customerName}</strong>.
                       </p>
                     </div>
                   )}
@@ -2080,7 +2201,7 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                       Pending Fulfillment & Dispatch
                     </span>
                     <p className="text-[11px] text-merchant-text-muted">
-                      Delivery partner assigned above ({riderName || 'Store Delivery Team'}) will be dispatched when you click <strong>Dispatch Order</strong>. Both buyer and delivery partner will be notified directly via WhatsApp & Email in 1 click.
+                      Delivery partner assigned above ({riderName || 'Store Delivery Team'}) will be dispatched when you click <strong>Dispatch Order</strong>. Customer email is queued after the update. Open the prepared WhatsApp messages and press Send to notify the buyer or delivery partner.
                     </p>
                   </div>
                 )}
@@ -2406,11 +2527,11 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-merchant-text-muted uppercase tracking-wider block">
                   {statusConfirmModal.targetStatus === 'DISPATCHED' || statusConfirmModal.targetStatus === 'COMPLETED'
-                    ? 'Dual Direct Notifications (Buyer & Delivery Partner)'
-                    : 'Direct Buyer Notifications (1-Click)'}
+                    ? 'Buyer email and prepared WhatsApp messages'
+                    : 'Buyer email and prepared WhatsApp message'}
                 </span>
                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                  ⚡ Sent Directly (1-Click, No Redirects)
+                  Email queued; WhatsApp requires Send
                 </span>
               </div>
 
@@ -2494,10 +2615,10 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
                   <>
                     <Send className="w-4 h-4" />
                     {statusConfirmModal.targetStatus === 'DISPATCHED'
-                      ? 'Confirm Dispatch & Notify Both (1-Click)'
+                      ? 'Confirm Dispatch'
                       : statusConfirmModal.targetStatus === 'COMPLETED'
-                      ? 'Confirm Delivery & Notify Both (1-Click)'
-                      : 'Confirm & Notify (1-Click)'}
+                      ? 'Confirm Delivery'
+                      : 'Confirm Update'}
                   </>
                 )}
               </button>

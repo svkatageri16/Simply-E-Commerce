@@ -58,6 +58,12 @@ export class OrdersController {
   }
 
   // 2. Merchant Order Management (Backward Compatibility - Canonical is /seller/orders)
+  @UseGuards(TenantGuard)
+  @Post(':id/out-for-delivery')
+  async markOutForDelivery(@CurrentTenant() tenant: TenantContext, @Param('id') id: string) {
+    return this.ordersService.markOutForDelivery(id, tenant);
+  }
+
   @ApiBearerAuth()
   @UseGuards(TenantGuard)
   @Get()

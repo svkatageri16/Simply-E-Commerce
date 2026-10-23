@@ -125,16 +125,18 @@ export default function StoreCheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'RAZORPAY'>('COD');
   const [couponInput, setCouponInput] = useState('');
   const checkoutKeyRef = useRef<string>('');
+  const checkoutStorageKey = `simply_checkout_key:${String(slug || '')}:${directToken || cart?.id || guestToken || ''}`;
 
   useEffect(() => {
-    if (!checkoutKeyRef.current) {
-      checkoutKeyRef.current = 'chk_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-    }
-  }, []);
+    try {
+      checkoutKeyRef.current = sessionStorage.getItem(checkoutStorageKey) || `chk_${crypto.randomUUID()}`;
+      sessionStorage.setItem(checkoutStorageKey, checkoutKeyRef.current);
+    } catch { checkoutKeyRef.current = `chk_${crypto.randomUUID()}`; }
+  }, [checkoutStorageKey]);
 
   const handlePaymentMethodChange = (method: 'COD' | 'RAZORPAY') => {
+    if (submitting) return;
     setPaymentMethod(method);
-    setSubmitting(false);
   };
 
   const taxableAmountPaise = Math.max(0, subtotalPaise - discountPaise);
@@ -389,10 +391,11 @@ export default function StoreCheckoutPage() {
           if (typeof window === 'undefined') return resolve(false);
           if ((window as any).Razorpay) return resolve(true);
           const script = document.createElement('script');
+          const timeout = window.setTimeout(() => resolve(false), 15000);
           script.src = 'https://checkout.razorpay.com/v1/checkout.js';
           script.async = true;
-          script.onload = () => resolve(true);
-          script.onerror = () => resolve(false);
+          script.onload = () => { window.clearTimeout(timeout); resolve(Boolean((window as any).Razorpay)); };
+          script.onerror = () => { window.clearTimeout(timeout); resolve(false); };
           document.body.appendChild(script);
         });
 
@@ -420,12 +423,13 @@ export default function StoreCheckoutPage() {
           handler: async function (response: any) {
             try {
               await api.payments.verify({
-                paymentOrderId: paymentOrder.id,
+                paymentOrderId: paymentOrder.paymentOrderId,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_signature: response.razorpay_signature,
               });
               clearCart();
+              try { sessionStorage.removeItem(checkoutStorageKey); } catch {}
               toast.success('Order Placed Successfully!', `Order #${orderResult.orderNumber}`);
               const tokenParam = orderResult.trackingToken ? `?t=${orderResult.trackingToken}` : '';
               router.push(`/store/${slug}/order/${orderResult.orderNumber}${tokenParam}`);
@@ -445,6 +449,7 @@ export default function StoreCheckoutPage() {
       } else {
         // COD Success
         clearCart();
+        try { sessionStorage.removeItem(checkoutStorageKey); } catch {}
         toast.success('Order Placed!', `Your order #${orderResult.orderNumber} is confirmed.`);
         const tokenParam = orderResult.trackingToken ? `?t=${orderResult.trackingToken}` : '';
         router.push(`/store/${slug}/order/${orderResult.orderNumber}${tokenParam}`);

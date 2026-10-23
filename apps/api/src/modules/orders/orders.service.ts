@@ -266,6 +266,8 @@ export class OrdersService {
     const canonical = (value: any): any => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().filter(key => value[key] !== undefined).map(key => [key, canonical(value[key])])) : value;
     const { paymentMethod: _method, checkoutKey: _key, discountPaise: _discount, ...selection } = dto;
     const checkoutHash = crypto.createHash('sha256').update(JSON.stringify(canonical(selection))).digest('hex');
+    // Replays must pass the same current public-store gate as a new checkout.
+    const { store } = await this.visibilityService.evaluateVisibility(dto.storeId);
     if (checkoutKey) {
       const existing = await this.prisma.order.findUnique({ where: { checkoutKey } });
       if (existing) return this.prisma.$transaction(async tx => {
@@ -273,9 +275,6 @@ export class OrdersService {
         return this.replayCheckout(tx, await tx.order.findUniqueOrThrow({ where: { id: existing.id } }), dto, checkoutHash);
       });
     }
-
-    // 1. Enforce Server-Side Subscription Check: Store MUST be LIVE with active paid subscription
-    const { store } = await this.visibilityService.evaluateVisibility(dto.storeId);
 
     // Direct checkout reuses the existing order transaction without a persistent cart.
     if (Boolean(dto.cartId) === Boolean(dto.directItems)) throw new BadRequestException('Provide either a cart or one direct checkout item.');
@@ -370,7 +369,7 @@ export class OrdersService {
     // 3. Execute Transaction
     const resultOrder = await this.prisma.$transaction(async (tx) => {
       if (checkoutKey) {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${checkoutKey}, 0))`;
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${checkoutKey}, 0))`;
         const existing = await tx.order.findUnique({ where: { checkoutKey } });
         if (existing) return this.replayCheckout(tx, existing, dto, checkoutHash);
       }
@@ -1141,6 +1140,21 @@ export class OrdersService {
         cancelled: cancelledCount,
       },
     };
+  }
+
+  public async markOutForDelivery(orderId: string, tenant: TenantContext) {
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+      const order = await tx.order.findFirst({ where: { id: orderId, tenantId: tenant.tenantId, storeId: tenant.storeId } });
+      if (!order) throw new NotFoundException('Order not found.');
+      if (order.status !== OrderStatus.DISPATCHED) throw new BadRequestException('Dispatch the order before marking it out for delivery.');
+      const updated = await tx.order.update({ where: { id: order.id }, data: { shipmentStatus: ShipmentStatus.OUT_FOR_DELIVERY } });
+      await tx.shipment.updateMany({ where: { orderId: order.id }, data: { status: ShipmentStatus.OUT_FOR_DELIVERY } });
+      await tx.outboxEvent.upsert({ where: { id: `order-email:${order.id}:OUT_FOR_DELIVERY` }, update: {}, create: {
+        id: `order-email:${order.id}:OUT_FOR_DELIVERY`, tenantId: tenant.tenantId, storeId: tenant.storeId, eventType: 'ORDER_EMAIL', payload: { orderId: order.id, status: 'OUT_FOR_DELIVERY' },
+      } });
+      return updated;
+    });
   }
 
   public async updateOrderStatus(

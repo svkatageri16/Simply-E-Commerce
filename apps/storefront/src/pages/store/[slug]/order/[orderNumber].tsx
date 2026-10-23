@@ -183,10 +183,10 @@ export default function OrderConfirmationPage() {
           {/* Email Confirmation Notice (Zero Login Required) */}
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 max-w-lg mx-auto text-center space-y-1">
             <p className="font-bold flex items-center justify-center gap-1.5">
-              <span>✉️</span> Confirmation & Live Tracking Sent to Your Email
+              <span>✉️</span> Email Confirmation & Tracking Updates
             </p>
             <p className="text-[11px] text-emerald-700">
-              No login required. You can check order status, delivery progress, and previous receipts anytime via the direct tracking link sent to your email.
+              Your order is saved and email confirmation is queued. No login is required to check order status and delivery progress using your secure tracking link.
             </p>
           </div>
 

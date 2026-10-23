@@ -315,7 +315,7 @@ export class ShippingService {
           targetShipmentStatus = ShipmentStatus.DELIVERED;
           targetOrderStatus = OrderStatus.COMPLETED;
         } else if (srStatus.includes('OUT FOR DELIVERY') || srStatus.includes('OUT_FOR_DELIVERY')) {
-          targetShipmentStatus = ShipmentStatus.IN_TRANSIT;
+          targetShipmentStatus = ShipmentStatus.OUT_FOR_DELIVERY;
           targetOrderStatus = OrderStatus.DISPATCHED;
         } else if (srStatus.includes('IN TRANSIT') || srStatus.includes('SHIPPED') || srStatus.includes('PICKED UP')) {
           targetShipmentStatus = ShipmentStatus.IN_TRANSIT;
@@ -328,6 +328,9 @@ export class ShippingService {
       }
 
       await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM orders WHERE id = ${order.id} FOR UPDATE`;
+        const latest = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
+        if (latest.status === OrderStatus.CANCELLED || latest.status === OrderStatus.COMPLETED) return;
         await tx.shipment.update({
           where: { id: shipment.id },
           data: { status: targetShipmentStatus },
@@ -347,7 +350,7 @@ export class ShippingService {
           }
         }
 
-        if (targetOrderStatus !== order.status && order.status !== OrderStatus.COMPLETED) {
+        if (targetOrderStatus !== latest.status || latest.shipmentStatus !== targetShipmentStatus) {
           await tx.order.update({
             where: { id: order.id },
             data: {
@@ -356,6 +359,8 @@ export class ShippingService {
             },
           });
         }
+        const emailStatus = targetShipmentStatus === ShipmentStatus.OUT_FOR_DELIVERY ? 'OUT_FOR_DELIVERY' : targetOrderStatus;
+        await tx.outboxEvent.upsert({ where: { id: `order-email:${order.id}:${emailStatus}` }, update: {}, create: { id: `order-email:${order.id}:${emailStatus}`, tenantId: order.tenantId, storeId: order.storeId, eventType: 'ORDER_EMAIL', payload: { orderId: order.id, status: emailStatus } } });
       });
 
       return {
